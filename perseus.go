@@ -57,7 +57,7 @@ func (s *Server) Start() error {
 	if err := db.Ping(); err != nil {
 		return err
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(5)
 	s.db = db
 
 	s.g.Go(func() error {
