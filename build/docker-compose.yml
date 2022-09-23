@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  perseus:
+    image: mattermost/perseus
+    restart: always
+    ports:
+        - "5433:5433"
