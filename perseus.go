@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/jackc/pgproto3/v2"
@@ -48,7 +49,8 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	dsn := "postgres://mmuser:mostest@localhost/loadtest?sslmode=disable&binary_parameters=yes"
+	// dsn := "postgres://mmuser:mostest@localhost/loadtest?sslmode=disable&binary_parameters=yes"
+	dsn := os.Getenv("PERSEUS_DSN")
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return err
