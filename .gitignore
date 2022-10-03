@@ -1,0 +1,5 @@
+# Ignore config.json
+config/config.json
+
+# Ignore log files
+*.log

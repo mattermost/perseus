@@ -3,43 +3,44 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
+	"sync/atomic"
 
-	"github.com/agnivade/perseus"
+	"github.com/agnivade/perseus/internal/server"
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	if err := run(ctx); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func run(ctx context.Context) error {
-	addr := flag.String("addr", ":5432", "postgres protocol bind address")
+	var configFile string
+	flag.StringVar(&configFile, "config", "config/config.json", "Configuration file for the Perseus service.")
 	flag.Parse()
 
-	log.SetFlags(log.Lshortfile|log.LstdFlags)
-
-
-	s := perseus.NewServer(*addr)
-	if err := s.Start(); err != nil {
-		return err
+	config, err := server.ParseConfig(configFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not parse config file: %s\n", err)
+		os.Exit(1)
 	}
 
-	log.Printf("listening on %s", *addr)
+	s := server.New(config)
 
-	// Wait on signal before shutting down.
+	if err := s.Initialize(); err != nil {
+		fmt.Fprintf(os.Stderr, "could not start the server: %s\n", err)
+		os.Exit(1)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	var stopped atomic.Bool
+
+	go func() {
+		err := s.AcceptConns()
+		// No need to print error if server is manually stopping.
+		if err != nil && !stopped.Load() {
+			fmt.Println(err)
+		}
+	}()
+	defer s.Stop()
+
 	<-ctx.Done()
-	log.Printf("SIGINT received, shutting down")
-
-	if err := s.Stop(); err != nil {
-		return err
-	}
-
-	return nil
+	stopped.Store(true)
 }

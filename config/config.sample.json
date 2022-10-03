@@ -1,0 +1,7 @@
+{
+    "ListenAddress": ":5433",
+    "DBSettings": {
+        "WriterDSN": "postgres://user:password@localhost:5432/database?sslmode=disable",
+        "ReaderDSNs": []
+    }
+}
