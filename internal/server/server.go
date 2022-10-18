@@ -1,15 +1,10 @@
 package server
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"net"
 	"os"
 	"sync"
-	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Server contains all the necessary information to run Bifrost
@@ -22,7 +17,8 @@ type Server struct {
 	connMap map[net.Conn]struct{}
 	connMut sync.Mutex
 
-	backendConn *pgconn.PgConn
+	// backendConn *pgconn.PgConn
+	pool *Pool
 }
 
 // New creates a new Bifrost server
@@ -46,31 +42,15 @@ func (s *Server) Initialize() error {
 
 	s.ln = l
 
-	// Place this in AcquireConn
-	pgConn, err := pgconn.Connect(context.Background(), s.cfg.DBSettings.WriterDSN)
+	pool, err := NewPool(s.cfg.DBSettings.WriterDSN, s.logger)
 	if err != nil {
-		return fmt.Errorf("pgconn failed to connect: %v", err)
+		return err
 	}
 
-	if err := execQuery(pgConn, ";"); err != nil {
-		return fmt.Errorf("failed to ping: %v", err)
-	}
+	s.pool = pool
 
-	// XXX: Maybe better to hijack the connection here?
-	// But only places are the access the raw conn and closing.
-	s.backendConn = pgConn
-
+	// s.backendConn = pgConn
 	return nil
-}
-
-func execQuery(pgConn *pgconn.PgConn, sql string) error {
-	mrr := pgConn.Exec(context.Background(), sql)
-	var err error
-	for mrr.NextResult() {
-		_, err = mrr.ResultReader().Close()
-	}
-	err = mrr.Close()
-	return err
 }
 
 func (s *Server) AcceptConns() error {
@@ -129,10 +109,8 @@ func (s *Server) Stop() {
 	}
 	s.connMut.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := s.backendConn.Close(ctx); err != nil {
-		s.logger.Printf("Error closing backend connection: %v\n", err)
+	if err := s.pool.Close(); err != nil {
+		s.logger.Printf("Error closing pool: %v\n", err)
 	}
 
 	return

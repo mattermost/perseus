@@ -1,36 +1,49 @@
 package server
 
 import (
-	"encoding/json"
-	"errors"
 	"net"
 
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
-var errUnknownMsg = errors.New("unknown message")
-
-func (s *Server) handleConn(c net.Conn) error {
-	clientEnd := pgproto3.NewBackend(c, c) // acts as the proxy for client conn
-	if err := s.handleStartup(clientEnd); err != nil {
+func (s *Server) handleConn(c net.Conn) (err error) {
+	cc := NewClientConn(c, s.logger, s.pool)
+	if err := cc.handleStartup(); err != nil {
 		return err
 	}
 
+	defer func() {
+		if cc.serverConn != nil {
+			if err != nil || cc.txStatus != StatusUnset /* This takes of care TxStatus = E */ {
+				if err2 := cc.pool.DestroyConn(cc.serverConn); err2 != nil {
+					s.logger.Printf("Error while destroying conn: %v\n", err2)
+				}
+				cc.serverConn = nil
+			}
+		}
+	}()
+
 	// enter command cycle
+	var feMsg pgproto3.FrontendMessage
 	for {
-		feMsg, err := clientEnd.Receive()
+		// resetting txStatus
+		cc.txStatus = StatusUnset
+
+		feMsg, err = cc.handle.Receive()
 		if err != nil {
 			return err
 		}
 
 		switch feMsg.(type) {
 		case *pgproto3.Query:
-			if err := s.handleQuery(feMsg, clientEnd); err != nil {
+			err = cc.handleQuery(feMsg)
+			if err != nil {
 				return err
 			}
 		case *pgproto3.Parse,
 			*pgproto3.Bind:
-			if err := s.handleExtendedQuery(feMsg, clientEnd); err != nil {
+			err = cc.handleExtendedQuery(feMsg)
+			if err != nil {
 				return err
 			}
 		case *pgproto3.Terminate:
@@ -41,48 +54,4 @@ func (s *Server) handleConn(c net.Conn) error {
 			return nil
 		}
 	}
-}
-
-func (s *Server) handleStartup(clientEnd *pgproto3.Backend) error {
-	startupMsg, err := clientEnd.ReceiveStartupMessage()
-	if err != nil {
-		return err
-	}
-
-	buf, err := json.Marshal(startupMsg)
-	if err != nil {
-		return err
-	}
-
-	s.logger.Printf("[startup] %s\n", string(buf))
-
-	switch startupMsg.(type) {
-	case *pgproto3.StartupMessage:
-		// TODO: Perform authentication here instead of blindly accepting everything
-		clientEnd.Send(&pgproto3.AuthenticationOk{})
-		clientEnd.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
-		if err := clientEnd.Flush(); err != nil {
-			return err
-		}
-	case *pgproto3.SSLRequest:
-		clientEnd.Send(&denySSL{})
-		if err := clientEnd.Flush(); err != nil {
-			return err
-		}
-		return s.handleStartup(clientEnd)
-	}
-
-	return nil
-}
-
-type denySSL struct {
-}
-
-func (*denySSL) Backend() {}
-
-func (dst *denySSL) Decode(src []byte) error {
-	return nil
-}
-func (src *denySSL) Encode(dst []byte) []byte {
-	return append(dst, 'N')
 }
