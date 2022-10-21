@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
@@ -24,7 +23,7 @@ type ClientConn struct {
 	pool     *Pool
 
 	// This is set to non-nil if there's an active transaction going on.
-	serverConn *pgconn.PgConn
+	serverConn *ServerConn
 
 	database string
 	schema   string
@@ -61,7 +60,6 @@ func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 	}
 
 	return nil
-	// TODO: release the conn back to the pool here.
 }
 
 func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error {
@@ -101,7 +99,6 @@ func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error 
 	}
 
 	return nil
-	// TODO: release the conn back to the pool here.
 }
 
 func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {

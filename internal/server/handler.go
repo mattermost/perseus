@@ -15,7 +15,7 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	defer func() {
 		if cc.serverConn != nil {
 			if err != nil || cc.txStatus != StatusUnset /* This takes of care TxStatus = E */ {
-				if err2 := cc.pool.DestroyConn(cc.serverConn); err2 != nil {
+				if err2 := cc.serverConn.Close(); err2 != nil {
 					s.logger.Printf("Error while destroying conn: %v\n", err2)
 				}
 				cc.serverConn = nil

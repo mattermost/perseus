@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 // Server contains all the necessary information to run Bifrost
@@ -42,7 +43,14 @@ func (s *Server) Initialize() error {
 
 	s.ln = l
 
-	pool, err := NewPool(s.cfg.DBSettings.WriterDSN, s.logger)
+	pool, err := NewPool(&PoolConfig{
+		DSN:          s.cfg.DBSettings.WriterDSN,
+		Logger:       s.logger,
+		MaxIdleCount: 3,
+		MaxOpen:      3,
+		MaxLifetime:  time.Hour,
+		MaxIdleTime:  5 * time.Minute,
+	})
 	if err != nil {
 		return err
 	}
@@ -106,12 +114,11 @@ func (s *Server) Stop() {
 		if err := conn.Close(); err != nil {
 			s.logger.Printf("Error closing client connection: %v\n", err)
 		}
+		delete(s.connMap, conn)
 	}
 	s.connMut.Unlock()
 
 	if err := s.pool.Close(); err != nil {
 		s.logger.Printf("Error closing pool: %v\n", err)
 	}
-
-	return
 }
