@@ -1,9 +1,8 @@
 package server
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
-	"net"
 
 	"github.com/jackc/pgx/v5/pgproto3"
 )
@@ -16,7 +15,6 @@ const (
 )
 
 type ClientConn struct {
-	// rawConn  net.Conn
 	handle   *pgproto3.Backend
 	txStatus byte
 	logger   *log.Logger
@@ -29,13 +27,11 @@ type ClientConn struct {
 	schema   string
 }
 
-func NewClientConn(cConn net.Conn, logger *log.Logger, pool *Pool) *ClientConn {
+func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool) *ClientConn {
 	return &ClientConn{
-		// rawConn: cConn,
-		handle: pgproto3.NewBackend(cConn, cConn),
-		pool:   pool,
+		handle: handle,
 		logger: logger,
-		// status:  StatusIdle,
+		pool:   pool,
 	}
 }
 
@@ -44,15 +40,16 @@ func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 	if cc.serverConn == nil {
 		conn, err := cc.pool.AcquireConn()
 		if err != nil {
-			return err
+			return fmt.Errorf("error while acquiring conn: %w", err)
 		}
+		// TODO: exec schema search path
 		cc.serverConn = conn
 	}
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
-	serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
+	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
 	serverEnd.Send(feMsg)
 	if err := serverEnd.Flush(); err != nil {
-		return err
+		return fmt.Errorf("error while flushing queryMsg: %w", err)
 	}
 
 	if err := cc.readBackendResponse(serverEnd); err != nil {
@@ -67,18 +64,19 @@ func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error 
 	if cc.serverConn == nil {
 		conn, err := cc.pool.AcquireConn()
 		if err != nil {
-			return err
+			return fmt.Errorf("error while acquiring conn: %w", err)
 		}
+		// TODO: exec schema search path
 		cc.serverConn = conn
 	}
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
-	serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
+	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
 	serverEnd.Send(feMsg)
 
 	for {
 		feMsg, err := cc.handle.Receive()
 		if err != nil {
-			return err
+			return fmt.Errorf("error while receiving msg in extendedQuery: %w", err)
 		}
 
 		serverEnd.Send(feMsg)
@@ -91,7 +89,7 @@ func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error 
 	}
 
 	if err := serverEnd.Flush(); err != nil {
-		return err
+		return fmt.Errorf("error while flushing extendedQuery: %w", err)
 	}
 
 	if err := cc.readBackendResponse(serverEnd); err != nil {
@@ -107,7 +105,7 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 	for {
 		beMsg, err := serverEnd.Receive()
 		if err != nil {
-			return err
+			return fmt.Errorf("error while receiving from server: %w", err)
 		}
 		cnt++
 
@@ -116,7 +114,7 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 		case *pgproto3.ReadyForQuery:
 			cc.handle.Send(typedMsg)
 			if err := cc.handle.Flush(); err != nil {
-				return err
+				return fmt.Errorf("error while flushing to client: %w", err)
 			}
 			cc.txStatus = typedMsg.TxStatus
 
@@ -131,56 +129,10 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 			// Flush if we have queued too many messages
 			if cnt%10 == 0 {
 				if err := cc.handle.Flush(); err != nil {
-					return err
+					return fmt.Errorf("error while flushing to client: %w", err)
 				}
 			}
 			continue
 		}
 	}
-}
-
-func (cc *ClientConn) handleStartup() error {
-	startupMsg, err := cc.handle.ReceiveStartupMessage()
-	if err != nil {
-		return err
-	}
-
-	buf, err := json.Marshal(startupMsg)
-	if err != nil {
-		return err
-	}
-
-	cc.logger.Printf("[startup] %s\n", string(buf))
-
-	switch typedMsg := startupMsg.(type) {
-	case *pgproto3.StartupMessage:
-		// TODO: Perform authentication here instead of blindly accepting everything
-		cc.database = typedMsg.Parameters["database"]
-		cc.schema = typedMsg.Parameters["schema_search_path"]
-		cc.handle.Send(&pgproto3.AuthenticationOk{})
-		cc.handle.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
-		if err := cc.handle.Flush(); err != nil {
-			return err
-		}
-	case *pgproto3.SSLRequest:
-		cc.handle.Send(&denySSL{})
-		if err := cc.handle.Flush(); err != nil {
-			return err
-		}
-		return cc.handleStartup()
-	}
-
-	return nil
-}
-
-type denySSL struct {
-}
-
-func (*denySSL) Backend() {}
-
-func (dst *denySSL) Decode(src []byte) error {
-	return nil
-}
-func (src *denySSL) Encode(dst []byte) []byte {
-	return append(dst, 'N')
 }

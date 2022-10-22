@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -12,17 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// Pool is a copied implementation of just the connection pooling
+// logic from database/sql.
 type Pool struct {
-	dsn    string
-	logger *log.Logger
-	// // This is a channel to acquire/release connections.
-	// conns chan *pgconn.PgConn
-	// // This holds all the connections.
-	// allConns    map[*pgconn.PgConn]struct{}
-	// allConnsMut sync.RWMutex
-
-	// Total time waited for new connections.
-	waitDuration atomic.Int64
+	// dsn       string
+	logger    *log.Logger
+	spawnConn func(ctx context.Context) (*pgconn.PgConn, error)
 
 	mu           sync.Mutex    // protects following fields
 	freeConn     []*ServerConn // free connections ordered by returnedAt oldest to newest
@@ -38,27 +32,33 @@ type Pool struct {
 	openerCh chan struct{}
 	closed   bool
 
-	maxIdleCount      int           // zero means defaultMaxIdleConns; negative means 0
+	maxIdle           int           // zero means defaultMaxIdleConns; negative means 0
 	maxOpen           int           // <= 0 means unlimited
 	maxLifetime       time.Duration // maximum amount of time a connection may be reused
 	maxIdleTime       time.Duration // maximum amount of time a connection may be idle before being closed
+	connCreateTimeout time.Duration
+	connCloseTimeout  time.Duration
 	cleanerCh         chan struct{}
-	waitCount         int64 // Total number of connections waited for.
-	maxIdleClosed     int64 // Total number of connections closed due to idle count.
-	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
-	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.
+	waitCount         int64        // Total number of connections waited for.
+	maxIdleClosed     int64        // Total number of connections closed due to idle count.
+	maxIdleTimeClosed int64        // Total number of connections closed due to idle time.
+	maxLifetimeClosed int64        // Total number of connections closed due to max connection lifetime limit.
+	waitDuration      atomic.Int64 // Total time waited for new connections.
 
 	stop func() // stop cancels the connection opener.
 }
 
 type PoolConfig struct {
-	DSN    string
-	Logger *log.Logger
+	// DSN    string
+	SpawnConn func(ctx context.Context) (*pgconn.PgConn, error)
+	Logger    *log.Logger
 
-	MaxIdleCount int
-	MaxOpen      int
-	MaxLifetime  time.Duration
-	MaxIdleTime  time.Duration
+	MaxIdle           int
+	MaxOpen           int
+	MaxLifetime       time.Duration
+	MaxIdleTime       time.Duration
+	ConnCreateTimeout time.Duration
+	ConnCloseTimeout  time.Duration
 }
 
 // This is the size of the connectionOpener request chan (Pool.openerCh).
@@ -73,34 +73,28 @@ var (
 	ErrConnExpired = errors.New("connection expired")
 )
 
-func NewPool(cfg *PoolConfig) (*Pool, error) {
-	// poolSize := 3
+func NewPool(cfg PoolConfig) (*Pool, error) {
+	if cfg.MaxIdle <= 0 {
+		return nil, errors.New("cfg.MaxIdleCount has to be positive")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
-		dsn:          cfg.DSN,
-		logger:       cfg.Logger,
-		maxIdleCount: cfg.MaxIdleCount,
-		maxOpen:      cfg.MaxOpen,
-		maxLifetime:  cfg.MaxLifetime,
-		maxIdleTime:  cfg.MaxIdleTime,
+		// dsn:               cfg.DSN,
+		spawnConn:         cfg.SpawnConn,
+		logger:            cfg.Logger,
+		maxIdle:           cfg.MaxIdle,
+		maxOpen:           cfg.MaxOpen,
+		maxLifetime:       cfg.MaxLifetime,
+		maxIdleTime:       cfg.MaxIdleTime,
+		connCreateTimeout: cfg.ConnCreateTimeout,
+		connCloseTimeout:  cfg.ConnCloseTimeout,
 
-		openerCh: make(chan struct{}, connectionRequestQueueSize),
-		// lastPut:      make(map[*ServerConn]string),
+		openerCh:     make(chan struct{}, connectionRequestQueueSize),
 		connRequests: make(map[uint64]chan connRequest),
 		stop:         cancel,
 	}
 
 	go p.connectionOpener(ctx)
-
-	// var err error
-	// for i := 0; i < poolSize; i++ {
-	// 	conn, err := p.spawnConn()
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	p.allConns[conn] = struct{}{}
-	// 	p.conns <- conn
-	// }
 
 	return p, nil
 }
@@ -135,8 +129,9 @@ func (p *Pool) openNewConnection(ctx context.Context) {
 	defer p.mu.Unlock()
 	if p.closed {
 		if err == nil {
-			// TODO: maybe pass new context?
-			conn.Close(context.Background())
+			closeCtx, closeCancel := context.WithTimeout(context.Background(), p.connCloseTimeout)
+			defer closeCancel()
+			conn.Close(closeCtx)
 		}
 		p.numOpen--
 		return
@@ -147,29 +142,27 @@ func (p *Pool) openNewConnection(ctx context.Context) {
 		p.maybeOpenNewConnections()
 		return
 	}
-	dc := &ServerConn{
+	sc := &ServerConn{
 		pool:       p,
 		createdAt:  time.Now(),
 		returnedAt: time.Now(),
 		conn:       conn,
 	}
-	if p.putConnDBLocked(dc, err) {
-		// p.addDepLocked(dc, dc)
-	} else {
+	if !p.putConnDBLocked(sc, err) {
 		p.numOpen--
-		// TODO: maybe pass new context?
-		conn.Close(context.Background())
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), p.connCloseTimeout)
+		defer closeCancel()
+		conn.Close(closeCtx)
 	}
 }
 
-// Satisfy a connRequest or put the driverConn in the idle pool and return true
-// or return false.
+// Satisfy a connRequest or put the serverConn in the idle pool.
 // putConnDBLocked will satisfy a connRequest if there is one, or it will
-// return the *driverConn to the freeConn list if err == nil and the idle
+// return the *serverConn to the freeConn list if err == nil and the idle
 // connection limit will not be exceeded.
-// If err != nil, the value of dc is ignored.
-// If err == nil, then dc must not equal nil.
-// If a connRequest was fulfilled or the *driverConn was placed in the
+// If err != nil, the value of sc is ignored.
+// If err == nil, then sc must not equal nil.
+// If a connRequest was fulfilled or the *serverConn was placed in the
 // freeConn list, then true is returned, otherwise false is returned.
 func (p *Pool) putConnDBLocked(sc *ServerConn, err error) bool {
 	if p.closed {
@@ -194,7 +187,9 @@ func (p *Pool) putConnDBLocked(sc *ServerConn, err error) bool {
 		}
 		return true
 	} else if err == nil && !p.closed {
-		if p.maxIdleConnsLocked() > len(p.freeConn) {
+		// if there is space for more idle conns
+		// then add it.
+		if p.maxIdle > len(p.freeConn) {
 			p.freeConn = append(p.freeConn, sc)
 			p.startCleanerLocked()
 			return true
@@ -202,20 +197,6 @@ func (p *Pool) putConnDBLocked(sc *ServerConn, err error) bool {
 		p.maxIdleClosed++
 	}
 	return false
-}
-
-const defaultMaxIdleConns = 2
-
-func (p *Pool) maxIdleConnsLocked() int {
-	n := p.maxIdleCount
-	switch {
-	case n == 0:
-		return defaultMaxIdleConns
-	case n < 0:
-		return 0
-	default:
-		return n
-	}
 }
 
 func (p *Pool) shortestIdleTimeLocked() time.Duration {
@@ -255,20 +236,13 @@ func (p *Pool) maybeOpenNewConnections() {
 }
 
 // putConn adds a connection to the db's free pool.
-// err is optionally the last error that occurred on this connection.
 func (p *Pool) ReleaseConn(sc *ServerConn) {
-	// if !errors.Is(err, driver.ErrBadConn) {
-	// 	if !sc.validateConnection(resetSession) {
-	// 		err = driver.ErrBadConn
-	// 	}
-	// }
 	p.mu.Lock()
 	if !sc.inUse {
 		p.mu.Unlock()
 		panic("perseus: connection returned that was never out")
 	}
 
-	// if !errors.Is(err, driver.ErrBadConn) && sc.expired(p.maxLifetime) {
 	var closeConn bool
 	if sc.expired(p.maxLifetime) {
 		p.maxLifetimeClosed++
@@ -276,11 +250,6 @@ func (p *Pool) ReleaseConn(sc *ServerConn) {
 	}
 	sc.inUse = false
 	sc.returnedAt = time.Now()
-
-	// for _, fn := range sc.onPut {
-	// 	fn()
-	// }
-	// sc.onPut = nil
 
 	if closeConn {
 		// Don't reuse bad connections.
@@ -292,9 +261,6 @@ func (p *Pool) ReleaseConn(sc *ServerConn) {
 		sc.Close()
 		return
 	}
-	// if putConnHook != nil {
-	// 	putConnHook(db, dc)
-	// }
 	added := p.putConnDBLocked(sc, nil)
 	p.mu.Unlock()
 
@@ -320,13 +286,16 @@ const (
 // like which Db, which schema, whether reader/writer etc.
 // later this will be managed by pool manager. And pool manager
 // will call into pool.
-//
 func (p *Pool) AcquireConn() (*ServerConn, error) {
-	sc, err := p.conn(cachedOrNewConn)
-	// only return if connection is not expired, then probably
-	// something else has happened
-	if err == nil || !errors.Is(err, ErrConnExpired) {
-		return sc, err
+	// The first time might run into an expired connection,
+	// so we give a second chance.
+	for i := 0; i < 2; i++ {
+		sc, err := p.conn(cachedOrNewConn)
+		// only return if connection is not expired, then probably
+		// something else has happened
+		if err == nil || !errors.Is(err, ErrConnExpired) {
+			return sc, err
+		}
 	}
 
 	return p.conn(alwaysNewConn)
@@ -339,13 +308,7 @@ func (p *Pool) conn(strategy connReuseStrategy) (*ServerConn, error) {
 		p.mu.Unlock()
 		return nil, ErrPoolClosed
 	}
-	// Check if the context is expired.
-	// select {
-	// default:
-	// case <-ctx.Done():
-	// 	p.mu.Unlock()
-	// 	return nil, ctx.Err()
-	// }
+
 	lifetime := p.maxLifetime
 
 	// Prefer a free connection, if possible.
@@ -364,14 +327,10 @@ func (p *Pool) conn(strategy connReuseStrategy) (*ServerConn, error) {
 		}
 		p.mu.Unlock()
 
-		// Reset the session if required.
-		// if err := conn.resetSession(ctx); errors.Is(err, driver.ErrBadConn) {
-		// 	conn.Close()
-		// 	return nil, err
-		// }
-
 		return conn, nil
 	}
+
+	// CacheMiss
 
 	// Out of free connections or we were asked not to use one. If we're not
 	// allowed to open any more connections, make a request and wait.
@@ -430,7 +389,6 @@ func (p *Pool) conn(strategy connReuseStrategy) (*ServerConn, error) {
 		conn:       conn,
 		inUse:      true,
 	}
-	// db.addDepLocked(dc, dc)
 	p.mu.Unlock()
 	return sc, nil
 }
@@ -537,6 +495,8 @@ func (p *Pool) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*Se
 		last := len(p.freeConn) - 1
 		for i := last; i >= 0; i-- {
 			c := p.freeConn[i]
+			// If the conn has been returned longer
+			// then the maxIdleTime
 			if c.returnedAt.Before(idleSince) {
 				i++
 				closing = p.freeConn[:i:i]
@@ -583,23 +543,9 @@ func (p *Pool) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*Se
 	return d, closing
 }
 
-func (p *Pool) spawnConn(ctx context.Context) (*pgconn.PgConn, error) {
-	// TODO: add timeout. Or better move away from DSN
-	pgConn, err := pgconn.Connect(ctx, p.dsn)
-	if err != nil {
-		return nil, fmt.Errorf("pgconn failed to connect: %v", err)
-	}
+// func (p *Pool) spawnConn(ctx context.Context) (*pgconn.PgConn, error) {
 
-	// if err := execQuery(pgConn, ";"); err != nil {
-	// 	// XXX: close conn here.
-	// 	return nil, fmt.Errorf("failed to ping: %v", err)
-	// }
-
-	// XXX: Maybe better to hijack the connection here?
-	// But only places are the access the raw conn and closing.
-
-	return pgConn, nil
-}
+// }
 
 // func execQuery(pgConn *pgconn.PgConn, sql string) error {
 // 	mrr := pgConn.Exec(context.Background(), sql)

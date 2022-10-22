@@ -60,8 +60,7 @@ func (sc *ServerConn) finalClose() error {
 	var err error
 
 	withLock(sc, func() {
-		// TODO: add DB conn close timeout
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), sc.pool.connCloseTimeout)
 		defer cancel()
 		err = sc.conn.Close(ctx)
 		sc.conn = nil

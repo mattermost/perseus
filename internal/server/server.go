@@ -5,24 +5,23 @@ import (
 	"net"
 	"os"
 	"sync"
-	"time"
 )
 
-// Server contains all the necessary information to run Bifrost
+// Server contains all the necessary information to run Perseus
 type Server struct {
 	cfg    Config
 	logger *log.Logger
 
-	wg      sync.WaitGroup
-	ln      net.Listener
-	connMap map[net.Conn]struct{}
-	connMut sync.Mutex
+	wg           sync.WaitGroup
+	ln           net.Listener
+	connMut      sync.Mutex
+	connMap      map[net.Conn]struct{}
+	clientConnWg sync.WaitGroup
 
-	// backendConn *pgconn.PgConn
-	pool *Pool
+	poolMgr *PoolManager
 }
 
-// New creates a new Bifrost server
+// New creates a new Perseus server
 func New(cfg Config) *Server {
 	s := &Server{
 		cfg:     cfg,
@@ -43,21 +42,8 @@ func (s *Server) Initialize() error {
 
 	s.ln = l
 
-	pool, err := NewPool(&PoolConfig{
-		DSN:          s.cfg.DBSettings.WriterDSN,
-		Logger:       s.logger,
-		MaxIdleCount: 3,
-		MaxOpen:      3,
-		MaxLifetime:  time.Hour,
-		MaxIdleTime:  5 * time.Minute,
-	})
-	if err != nil {
-		return err
-	}
+	s.poolMgr = NewPoolManager(s.cfg.DBSettings.WriterDSN, s.logger)
 
-	s.pool = pool
-
-	// s.backendConn = pgConn
 	return nil
 }
 
@@ -73,6 +59,7 @@ func (s *Server) AcceptConns() error {
 		}
 
 		// Handle the connection in a new goroutine.
+		s.clientConnWg.Add(1)
 		go func(c net.Conn) {
 			defer func() {
 				// Closing the connection
@@ -82,6 +69,8 @@ func (s *Server) AcceptConns() error {
 				s.connMut.Lock()
 				delete(s.connMap, conn)
 				s.connMut.Unlock()
+
+				s.clientConnWg.Done()
 			}()
 
 			s.logger.Println("Accepting new connection")
@@ -118,7 +107,10 @@ func (s *Server) Stop() {
 	}
 	s.connMut.Unlock()
 
-	if err := s.pool.Close(); err != nil {
-		s.logger.Printf("Error closing pool: %v\n", err)
+	// Wait till all client connections are closed.
+	s.clientConnWg.Wait()
+
+	if err := s.poolMgr.Close(); err != nil {
+		s.logger.Printf("Error closing pool manager: %v\n", err)
 	}
 }
