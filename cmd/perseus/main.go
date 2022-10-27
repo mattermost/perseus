@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync/atomic"
 
+	"github.com/agnivade/perseus/config"
 	"github.com/agnivade/perseus/internal/server"
 )
 
@@ -16,15 +17,14 @@ func main() {
 	flag.StringVar(&configFile, "config", "config/config.json", "Configuration file for the Perseus service.")
 	flag.Parse()
 
-	config, err := server.ParseConfig(configFile)
+	cfg, err := config.Parse(configFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not parse config file: %s\n", err)
 		os.Exit(1)
 	}
 
-	s := server.New(config)
-
-	if err := s.Initialize(); err != nil {
+	s, err := server.New(cfg)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not start the server: %s\n", err)
 		os.Exit(1)
 	}

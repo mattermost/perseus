@@ -7,43 +7,43 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agnivade/perseus/config"
+
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type PoolManager struct {
-	mut   sync.Mutex
+	mut   sync.RWMutex
 	pools map[string]*Pool
 
-	dsn    string //XXX: This will later be dynamically fetched.
+	cfg    config.Config
 	logger *log.Logger
 }
 
-func NewPoolManager(dsn string, logger *log.Logger) *PoolManager {
+func NewPoolManager(cfg config.Config, logger *log.Logger) *PoolManager {
 	return &PoolManager{
 		pools:  make(map[string]*Pool),
-		dsn:    dsn,
+		cfg:    cfg,
 		logger: logger,
 	}
 }
 
-func (pm *PoolManager) GetOrCreatePool(db, schema string) (pool *Pool, err error) {
-	// XXX: Get the target DSN from the source DB and schema name
-	// XXX: Possibly factor in read replicas as well.
-
-	// XXX: Check if pool already exists.
-	pm.mut.Lock()
-	pool = pm.pools["host"+"db"]
-	pm.mut.Unlock()
+func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
+	// Fast path once the pool is created
+	pm.mut.RLock()
+	pool = pm.pools[row.dest_host+row.dest_db]
+	pm.mut.RUnlock()
 	if pool != nil {
 		return pool, nil
 	}
 
-	// XXX: verify which dsn gets bound to the function.
+	// TODO: dec the dest password
+
 	spawnConn := func(ctx context.Context) (*pgconn.PgConn, error) {
 		var cancel func()
-		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs))
 		defer cancel()
-		pgConn, err := pgconn.Connect(ctx, pm.dsn)
+		pgConn, err := pgconn.Connect(ctx, createDSN(row))
 		if err != nil {
 			return nil, fmt.Errorf("pgconn failed to connect: %w", err)
 		}
@@ -59,20 +59,20 @@ func (pm *PoolManager) GetOrCreatePool(db, schema string) (pool *Pool, err error
 	pool, err = NewPool(PoolConfig{
 		SpawnConn:         spawnConn,
 		Logger:            pm.logger,
-		MaxIdle:           3,
-		MaxOpen:           3,
-		MaxLifetime:       time.Hour,
-		MaxIdleTime:       5 * time.Minute,
-		ConnCreateTimeout: 5 * time.Second,
-		ConnCloseTimeout:  time.Second,
+		MaxIdle:           pm.cfg.PoolSettings.MaxIdle,
+		MaxOpen:           pm.cfg.PoolSettings.MaxOpen,
+		MaxLifetime:       time.Second * time.Duration(pm.cfg.PoolSettings.MaxLifetimeSecs),
+		MaxIdleTime:       time.Second * time.Duration(pm.cfg.PoolSettings.MaxIdletimeSecs),
+		ConnCreateTimeout: time.Second * time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs),
+		ConnCloseTimeout:  time.Second * time.Duration(pm.cfg.PoolSettings.ConnCloseTimeoutSecs),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Place it in the pool
+	// Place it in the map
 	pm.mut.Lock()
-	pm.pools["host"+"db"] = pool
+	pm.pools[row.dest_host+row.dest_db] = pool
 	pm.mut.Unlock()
 
 	return pool, nil
@@ -87,4 +87,10 @@ func (pm *PoolManager) Close() error {
 		err = p.Close()
 	}
 	return err
+}
+
+
+func createDSN(row AuthRow) string {
+	// postgres://mmuser:mostest@localhost:5433/loadtest?sslmode=disable
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", row.dest_user, row.dest_pass_enc, row.dest_host, row.dest_db)
 }

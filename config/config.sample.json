@@ -1,7 +1,15 @@
 {
     "ListenAddress": ":5433",
-    "DBSettings": {
-        "WriterDSN": "postgres://user:password@localhost:5432/database?sslmode=disable",
-        "ReaderDSNs": []
+    "AuthDBSettings": {
+        "AuthDBDSN": "postgres://mmuser:mostest@localhost:5432/loadtest?sslmode=disable",
+        "AuthQueryTimeoutSecs": 2
+    },
+    "PoolSettings": {
+        "MaxIdle":               3,
+        "MaxOpen":               5,
+        "MaxLifetimeSecs":       3600,
+        "MaxIdletimeSecs":       300,
+        "ConnCreateTimeoutSecs": 5,
+        "ConnCloseTimeoutSecs":  1
     }
 }

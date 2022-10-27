@@ -23,15 +23,15 @@ type ClientConn struct {
 	// This is set to non-nil if there's an active transaction going on.
 	serverConn *ServerConn
 
-	database string
-	schema   string
+	schema string
 }
 
-func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool) *ClientConn {
+func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool, schema string) *ClientConn {
 	return &ClientConn{
 		handle: handle,
 		logger: logger,
 		pool:   pool,
+		schema: schema,
 	}
 }
 

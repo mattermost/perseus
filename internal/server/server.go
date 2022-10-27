@@ -1,15 +1,20 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"sync"
+
+	"github.com/agnivade/perseus/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Server contains all the necessary information to run Perseus
 type Server struct {
-	cfg    Config
+	cfg    config.Config
 	logger *log.Logger
 
 	wg           sync.WaitGroup
@@ -18,34 +23,43 @@ type Server struct {
 	connMap      map[net.Conn]struct{}
 	clientConnWg sync.WaitGroup
 
-	poolMgr *PoolManager
+	authPool *pgxpool.Pool
+	poolMgr  *PoolManager
 }
 
 // New creates a new Perseus server
-func New(cfg Config) *Server {
+func New(cfg config.Config) (*Server, error) {
 	s := &Server{
 		cfg:     cfg,
 		logger:  log.New(os.Stdout, "[perseus] ", log.Lshortfile|log.LstdFlags),
 		connMap: make(map[net.Conn]struct{}),
 	}
 
-	return s
-}
-
-// Initialize the server
-func (s *Server) Initialize() error {
 	s.logger.Println("Initializing server..")
 	l, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("error trying to listen on %s: %v", s.cfg.ListenAddress, err)
 	}
-
 	s.ln = l
 
-	s.poolMgr = NewPoolManager(s.cfg.DBSettings.WriterDSN, s.logger)
+	poolCfg, err := pgxpool.ParseConfig(s.cfg.AuthDBSettings.AuthDBDSN)
+	if err != nil {
+		return nil, fmt.Errorf("error trying to parse pool config %s: %v", s.cfg.AuthDBSettings.AuthDBDSN, err)
+	}
+	authPool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
+	if err != nil {
+		return nil, fmt.Errorf("error initializing auth pool: %v", err)
+	}
+	s.authPool = authPool
 
-	return nil
+	s.poolMgr = NewPoolManager(s.cfg, s.logger)
+
+	return s, nil
 }
+
+// // Initialize the server
+// func (s *Server) Initialize() error {
+// }
 
 func (s *Server) AcceptConns() error {
 	s.wg.Add(1)

@@ -3,3 +3,6 @@ config/config.json
 
 # Ignore log files
 *.log
+
+# Ignore the binary
+perseus
