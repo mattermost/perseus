@@ -11,9 +11,18 @@ import (
 // Config is the configuration for a perseus server.
 type Config struct {
 	ListenAddress    string
+	AWSSettings      AWSSettings
 	AuthDBSettings   AuthDBSettings
 	PoolSettings     PoolSettings
 	OverrideSettings map[string]PoolSettings
+}
+
+type AWSSettings struct {
+	AccessKeyId     string
+	SecretAccessKey string
+	Region          string
+	Endpoint        string
+	KMSKeyARN       string
 }
 
 type PoolSettings struct {
@@ -23,6 +32,7 @@ type PoolSettings struct {
 	MaxIdletimeSecs       int
 	ConnCreateTimeoutSecs int
 	ConnCloseTimeoutSecs  int
+	SchemaExecTimeoutSecs int
 }
 
 type AuthDBSettings struct {

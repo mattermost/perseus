@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
 	"time"
 
+	scrypt "github.com/agnivade/easy-scrypt"
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
@@ -38,22 +40,19 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 
 	if params.database == "" {
 		msg := "empty database name received in params"
-		handle.Send(&pgproto3.ErrorResponse{Message: msg})
-		handle.Flush()
+		sendAndFlush(handle, msg)
 		return errors.New(msg)
 	}
 
 	if params.schema == "" {
 		msg := "empty schema name received in params"
-		handle.Send(&pgproto3.ErrorResponse{Message: msg})
-		handle.Flush()
+		sendAndFlush(handle, msg)
 		return errors.New(msg)
 	}
 
 	if params.username == "" {
 		msg := "empty user name received in params"
-		handle.Send(&pgproto3.ErrorResponse{Message: msg})
-		handle.Flush()
+		sendAndFlush(handle, msg)
 		return errors.New(msg)
 	}
 
@@ -61,18 +60,31 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	defer cancel()
 	var row AuthRow
 	err = s.authPool.
-		QueryRow(ctx, "SELECT id, source_db, source_schema, source_user, source_pass_hashed,		dest_host, dest_user, dest_db, dest_pass_enc FROM perseus_auth WHERE source_db=$1 AND source_schema=$2", params.database, params.schema).
+		QueryRow(ctx, "SELECT id, source_db, source_schema, source_user, source_pass_hashed, dest_host, dest_user, dest_db, dest_pass_enc FROM perseus_auth WHERE source_db=$1 AND source_schema=$2", params.database, params.schema).
 		Scan(&row.id, &row.source_db, &row.source_schema, &row.source_user, &row.source_pass_hashed, &row.dest_host, &row.dest_user, &row.dest_db, &row.dest_pass_enc)
 	if err != nil {
 		msg := fmt.Sprintf("error querying the auth table: %v", err)
-		handle.Send(&pgproto3.ErrorResponse{Message: msg})
-		handle.Flush()
+		sendAndFlush(handle, msg)
 		return errors.New(msg)
 	}
 
-	// TODO: hash the password and subtle time compare
-	if params.password != row.source_pass_hashed {
-		return errors.New("invalid client password passed")
+	decPass, err := base64.StdEncoding.DecodeString(row.source_pass_hashed)
+	if err != nil {
+		msg := fmt.Sprintf("error decoding from base64: %v", err)
+		sendAndFlush(handle, msg)
+		return errors.New(msg)
+	}
+
+	ok, err := scrypt.VerifyPassphrase(params.password, decPass)
+	if err != nil {
+		msg := fmt.Sprintf("error verifying password: %v", err)
+		sendAndFlush(handle, msg)
+		return errors.New(msg)
+	}
+	if !ok {
+		msg := fmt.Sprintf("password mismatch")
+		sendAndFlush(handle, msg)
+		return errors.New(msg)
 	}
 
 	handle.Send(&pgproto3.AuthenticationOk{})
@@ -181,4 +193,9 @@ func (dst *denySSL) Decode(src []byte) error {
 }
 func (src *denySSL) Encode(dst []byte) []byte {
 	return append(dst, 'N')
+}
+
+func sendAndFlush(handle *pgproto3.Backend, msg string) {
+	handle.Send(&pgproto3.ErrorResponse{Message: msg})
+	handle.Flush()
 }

@@ -38,12 +38,9 @@ func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool, sch
 func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 	// Leasing a connection
 	if cc.serverConn == nil {
-		conn, err := cc.pool.AcquireConn()
-		if err != nil {
-			return fmt.Errorf("error while acquiring conn: %w", err)
+		if err := cc.acquireConn(); err != nil {
+			return err
 		}
-		// TODO: exec schema search path
-		cc.serverConn = conn
 	}
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
 	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
@@ -62,12 +59,9 @@ func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error {
 	// Leasing a connection
 	if cc.serverConn == nil {
-		conn, err := cc.pool.AcquireConn()
-		if err != nil {
-			return fmt.Errorf("error while acquiring conn: %w", err)
+		if err := cc.acquireConn(); err != nil {
+			return err
 		}
-		// TODO: exec schema search path
-		cc.serverConn = conn
 	}
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
 	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
@@ -135,4 +129,27 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 			continue
 		}
 	}
+}
+
+func (cc *ClientConn) acquireConn() error {
+	conn, err := cc.pool.AcquireConn()
+	if err != nil {
+		return fmt.Errorf("error while acquiring conn: %w", err)
+	}
+	// We have just got a connection from the pool. First, we check
+	// whether it's healthy or not.
+	if err := conn.CheckConn(); err != nil {
+		// *Server.handleConn will take care of closing the connection.
+		return fmt.Errorf("error while checking conn: %w", err)
+	}
+
+	// This is a low-level method, so passing params is not really supported.
+	// We need to implement sanitization ourselves. XXX: item for future.
+	err = conn.Exec(fmt.Sprintf(`SET search_path='%s'`, cc.schema))
+	if err != nil {
+		return fmt.Errorf("error setting schema search path: %w", err)
+	}
+
+	cc.serverConn = conn
+	return nil
 }

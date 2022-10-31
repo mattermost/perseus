@@ -28,6 +28,10 @@ func (sc *ServerConn) Conn() net.Conn {
 	return sc.conn.Conn()
 }
 
+func (sc *ServerConn) CheckConn() error {
+	return sc.conn.CheckConn()
+}
+
 func (sc *ServerConn) expired(timeout time.Duration) bool {
 	if timeout <= 0 {
 		return false
@@ -71,6 +75,18 @@ func (sc *ServerConn) finalClose() error {
 	sc.pool.maybeOpenNewConnections()
 	sc.pool.mu.Unlock()
 
+	return err
+}
+
+func (sc *ServerConn) Exec(sql string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), sc.pool.schemaExecTimeout)
+	defer cancel()
+	mrr := sc.conn.Exec(ctx, sql)
+	var err error
+	for mrr.NextResult() {
+		_, err = mrr.ResultReader().Close()
+	}
+	err = mrr.Close()
 	return err
 }
 

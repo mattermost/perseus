@@ -38,28 +38,27 @@ func New(cfg config.Config) (*Server, error) {
 	s.logger.Println("Initializing server..")
 	l, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
-		return nil, fmt.Errorf("error trying to listen on %s: %v", s.cfg.ListenAddress, err)
+		return nil, fmt.Errorf("error trying to listen on %s: %w", s.cfg.ListenAddress, err)
 	}
 	s.ln = l
 
 	poolCfg, err := pgxpool.ParseConfig(s.cfg.AuthDBSettings.AuthDBDSN)
 	if err != nil {
-		return nil, fmt.Errorf("error trying to parse pool config %s: %v", s.cfg.AuthDBSettings.AuthDBDSN, err)
+		return nil, fmt.Errorf("error trying to parse pool config %s: %w", s.cfg.AuthDBSettings.AuthDBDSN, err)
 	}
 	authPool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing auth pool: %v", err)
+		return nil, fmt.Errorf("error initializing auth pool: %w", err)
 	}
 	s.authPool = authPool
 
-	s.poolMgr = NewPoolManager(s.cfg, s.logger)
+	s.poolMgr, err = NewPoolManager(s.cfg, s.logger)
+	if err != nil {
+		return nil, fmt.Errorf("error initializing pool manager: %w", err)
+	}
 
 	return s, nil
 }
-
-// // Initialize the server
-// func (s *Server) Initialize() error {
-// }
 
 func (s *Server) AcceptConns() error {
 	s.wg.Add(1)

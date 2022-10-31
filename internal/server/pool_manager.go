@@ -2,12 +2,18 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/agnivade/perseus/config"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kms"
+	"github.com/aws/aws-sdk-go/service/kms/kmsiface"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -18,14 +24,29 @@ type PoolManager struct {
 
 	cfg    config.Config
 	logger *log.Logger
+	kms    kmsiface.KMSAPI
 }
 
-func NewPoolManager(cfg config.Config, logger *log.Logger) *PoolManager {
+func NewPoolManager(cfg config.Config, logger *log.Logger) (*PoolManager, error) {
+	creds := credentials.NewStaticCredentials(cfg.AWSSettings.AccessKeyId, cfg.AWSSettings.SecretAccessKey, "")
+
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(cfg.AWSSettings.Region),
+		Endpoint:    aws.String(cfg.AWSSettings.Endpoint),
+		Credentials: creds,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error initializing AWS session: %w", err)
+	}
+
+	svc := kms.New(sess)
+
 	return &PoolManager{
 		pools:  make(map[string]*Pool),
 		cfg:    cfg,
 		logger: logger,
-	}
+		kms:    svc,
+	}, nil
 }
 
 func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
@@ -37,7 +58,19 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 		return pool, nil
 	}
 
-	// TODO: dec the dest password
+	decPass, err := base64.StdEncoding.DecodeString(row.dest_pass_enc)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding from base64: %w", err)
+	}
+
+	dec, err := pm.kms.Decrypt(&kms.DecryptInput{
+		CiphertextBlob: decPass,
+		KeyId:          aws.String(pm.cfg.AWSSettings.KMSKeyARN),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error decrypting pass: %w", err)
+	}
+	row.dest_pass_enc = string(dec.Plaintext)
 
 	spawnConn := func(ctx context.Context) (*pgconn.PgConn, error) {
 		var cancel func()
@@ -65,6 +98,7 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 		MaxIdleTime:       time.Second * time.Duration(pm.cfg.PoolSettings.MaxIdletimeSecs),
 		ConnCreateTimeout: time.Second * time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs),
 		ConnCloseTimeout:  time.Second * time.Duration(pm.cfg.PoolSettings.ConnCloseTimeoutSecs),
+		SchemaExecTimeout: time.Second * time.Duration(pm.cfg.PoolSettings.SchemaExecTimeoutSecs),
 	})
 	if err != nil {
 		return nil, err
@@ -88,7 +122,6 @@ func (pm *PoolManager) Close() error {
 	}
 	return err
 }
-
 
 func createDSN(row AuthRow) string {
 	// postgres://mmuser:mostest@localhost:5433/loadtest?sslmode=disable

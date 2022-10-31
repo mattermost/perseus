@@ -14,7 +14,6 @@ import (
 // Pool is a copied implementation of just the connection pooling
 // logic from database/sql.
 type Pool struct {
-	// dsn       string
 	logger    *log.Logger
 	spawnConn func(ctx context.Context) (*pgconn.PgConn, error)
 
@@ -38,6 +37,7 @@ type Pool struct {
 	maxIdleTime       time.Duration // maximum amount of time a connection may be idle before being closed
 	connCreateTimeout time.Duration
 	connCloseTimeout  time.Duration
+	schemaExecTimeout time.Duration
 	cleanerCh         chan struct{}
 	waitCount         int64        // Total number of connections waited for.
 	maxIdleClosed     int64        // Total number of connections closed due to idle count.
@@ -49,7 +49,6 @@ type Pool struct {
 }
 
 type PoolConfig struct {
-	// DSN    string
 	SpawnConn func(ctx context.Context) (*pgconn.PgConn, error)
 	Logger    *log.Logger
 
@@ -59,6 +58,7 @@ type PoolConfig struct {
 	MaxIdleTime       time.Duration
 	ConnCreateTimeout time.Duration
 	ConnCloseTimeout  time.Duration
+	SchemaExecTimeout time.Duration
 }
 
 // This is the size of the connectionOpener request chan (Pool.openerCh).
@@ -88,6 +88,7 @@ func NewPool(cfg PoolConfig) (*Pool, error) {
 		maxIdleTime:       cfg.MaxIdleTime,
 		connCreateTimeout: cfg.ConnCreateTimeout,
 		connCloseTimeout:  cfg.ConnCloseTimeout,
+		schemaExecTimeout: cfg.SchemaExecTimeout,
 
 		openerCh:     make(chan struct{}, connectionRequestQueueSize),
 		connRequests: make(map[uint64]chan connRequest),
@@ -542,17 +543,3 @@ func (p *Pool) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*Se
 
 	return d, closing
 }
-
-// func (p *Pool) spawnConn(ctx context.Context) (*pgconn.PgConn, error) {
-
-// }
-
-// func execQuery(pgConn *pgconn.PgConn, sql string) error {
-// 	mrr := pgConn.Exec(context.Background(), sql)
-// 	var err error
-// 	for mrr.NextResult() {
-// 		_, err = mrr.ResultReader().Close()
-// 	}
-// 	err = mrr.Close()
-// 	return err
-// }
