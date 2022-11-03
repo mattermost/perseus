@@ -2,6 +2,8 @@ github.com/agnivade/easy-scrypt v1.0.0 h1:Ef1ebAsJEiPsXqsEKZmf5CRQp/T70gbL10JtWa
 github.com/agnivade/easy-scrypt v1.0.0/go.mod h1:uZY/ujwkySVpDYFpEVRu7uYEMkcGIoFoX+stxpPZpvQ=
 github.com/aws/aws-sdk-go v1.44.127 h1:IoO2VfuIQg1aMXnl8l6OpNUKT4Qq5CnJMOyIWoTYXj0=
 github.com/aws/aws-sdk-go v1.44.127/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
+github.com/carlmjohnson/be v0.22.5 h1:Hpc4qYKatEMFAuTiLdaWQBqYErSKAHhrSCN53gqtJks=
+github.com/carlmjohnson/be v0.22.5/go.mod h1:KAgPUh0HpzWYZZI+IABdo80wTgY43YhbdsiLYAaSI/Q=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=

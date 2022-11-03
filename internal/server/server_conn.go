@@ -10,8 +10,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type Conner interface {
+	Conn() net.Conn
+	CheckConn() error
+	Close(ctx context.Context) error
+	Exec(ctx context.Context, sql string) *pgconn.MultiResultReader
+}
+
 type ServerConn struct {
-	conn *pgconn.PgConn
+	conn Conner
 	pool *Pool
 
 	createdAt time.Time

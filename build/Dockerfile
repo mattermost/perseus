@@ -1,5 +1,5 @@
 
-FROM golang:1.18.6-alpine3.15 AS builder
+FROM golang:1.19.3-alpine3.15 AS builder
 
 RUN apk add --update --no-cache ca-certificates bash make gcc musl-dev git openssh wget curl
 
@@ -14,8 +14,9 @@ RUN CGO_ENABLED=0 go build ./cmd/perseus
 
 #####
 
-FROM alpine:3.15
+FROM gcr.io/distroless/static-debian11
 
 COPY --from=builder /go/src/perseus/perseus /perseus
+COPY --from=builder /go/src/perseus/config/config.sample.json config/config.json
 
-ENTRYPOINT [ "/perseus", "-addr=:5433" ]
+ENTRYPOINT [ "/perseus" ]

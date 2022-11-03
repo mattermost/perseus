@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/agnivade/easy-scrypt v1.0.0
 	github.com/aws/aws-sdk-go v1.44.127
+	github.com/carlmjohnson/be v0.22.5
 	github.com/jackc/pgx/v5 v5.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
 )

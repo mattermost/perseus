@@ -72,7 +72,7 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 	}
 	row.dest_pass_enc = string(dec.Plaintext)
 
-	spawnConn := func(ctx context.Context) (*pgconn.PgConn, error) {
+	spawnConn := func(ctx context.Context) (Conner, error) {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs))
 		defer cancel()
