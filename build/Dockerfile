@@ -17,6 +17,6 @@ RUN CGO_ENABLED=0 go build ./cmd/perseus
 FROM gcr.io/distroless/static-debian11
 
 COPY --from=builder /go/src/perseus/perseus /perseus
-COPY --from=builder /go/src/perseus/config/config.sample.json config/config.json
+COPY --from=builder /go/src/perseus/config/config.json config/config.json
 
 ENTRYPOINT [ "/perseus" ]
