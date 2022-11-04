@@ -4,6 +4,13 @@
         "AuthDBDSN": "postgres://mmuser:mostest@localhost:5432/loadtest?sslmode=disable",
         "AuthQueryTimeoutSecs": 2
     },
+    "AWSSettings": {
+        "AccessKeyId": "",
+        "SecretAccessKey": "",
+        "Region": "us-east-1",
+        "Endpoint": "",
+        "KMSKeyARN": ""
+    },
     "PoolSettings": {
         "MaxIdle":               3,
         "MaxOpen":               5,
