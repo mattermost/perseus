@@ -38,7 +38,6 @@ type PoolSettings struct {
 type AuthDBSettings struct {
 	AuthDBDSN            string
 	AuthQueryTimeoutSecs int
-	PoolSettings         PoolSettings
 }
 
 // Parse reads the config file and returns a new *Config,
