@@ -137,7 +137,8 @@ func (p *Pool) openNewConnection(ctx context.Context) {
 	if err != nil {
 		p.numOpen--
 		p.putConnDBLocked(nil, err)
-		p.maybeOpenNewConnections()
+		// Deviation from database/sql. We don't want to open a new connection
+		// if creating one already failed.
 		return
 	}
 	sc := &ServerConn{
@@ -371,7 +372,8 @@ func (p *Pool) conn(strategy connReuseStrategy) (*ServerConn, error) {
 	if err != nil {
 		p.mu.Lock()
 		p.numOpen-- // correct for earlier optimism
-		p.maybeOpenNewConnections()
+		// Deviation from database/sql. We don't want to open a new connection
+		// if creating one already failed.
 		p.mu.Unlock()
 		return nil, err
 	}
