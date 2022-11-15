@@ -539,8 +539,125 @@ func (p *Pool) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*Se
 	return d, closing
 }
 
-func (p *Pool) Reload(_ PoolConfig) {
-	//TODO:
+func (p *Pool) Reload(new PoolConfig) {
+	if p.maxOpen != new.MaxOpen {
+		p.SetMaxOpenConns(new.MaxOpen)
+	}
+
+	if p.maxIdle != new.MaxIdle {
+		p.SetMaxIdleConns(new.MaxIdle)
+	}
+
+	if p.maxLifetime != new.MaxLifetime {
+		p.SetConnMaxLifetime(new.MaxLifetime)
+	}
+
+	if p.maxIdleTime != new.MaxIdleTime {
+		p.SetConnMaxIdleTime(new.MaxIdleTime)
+	}
+}
+
+// SetMaxIdleConns sets the maximum number of connections in the idle
+// connection pool.
+//
+// If MaxOpenConns is greater than 0 but less than the new MaxIdleConns,
+// then the new MaxIdleConns will be reduced to match the MaxOpenConns limit.
+//
+// If n <= 0, no idle connections are retained.
+//
+// The default max idle connections is currently 2. This may change in
+// a future release.
+func (p *Pool) SetMaxIdleConns(n int) {
+	p.logger.Println("setting max idle")
+	p.mu.Lock()
+	if n > 0 {
+		p.maxIdle = n
+	} else {
+		// No idle connections.
+		p.maxIdle = -1
+	}
+	// Make sure maxIdle doesn't exceed maxOpen
+	if p.maxOpen > 0 && p.maxIdle > p.maxOpen {
+		p.maxIdle = p.maxOpen
+	}
+	var closing []*ServerConn
+	idleCount := len(p.freeConn)
+	maxIdle := p.maxIdle
+	if idleCount > maxIdle {
+		closing = p.freeConn[maxIdle:]
+		p.freeConn = p.freeConn[:maxIdle]
+	}
+	p.maxIdleClosed += int64(len(closing))
+	p.mu.Unlock()
+	for _, c := range closing {
+		c.Close()
+	}
+}
+
+// SetMaxOpenConns sets the maximum number of open connections to the database.
+//
+// If MaxIdleConns is greater than 0 and the new MaxOpenConns is less than
+// MaxIdleConns, then MaxIdleConns will be reduced to match the new
+// MaxOpenConns limit.
+//
+// If n <= 0, then there is no limit on the number of open connections.
+// The default is 0 (unlimited).
+func (p *Pool) SetMaxOpenConns(n int) {
+	p.mu.Lock()
+	p.maxOpen = n
+	if n < 0 {
+		p.maxOpen = 0
+	}
+	syncMaxIdle := p.maxOpen > 0 && p.maxIdle > p.maxOpen
+	p.mu.Unlock()
+	if syncMaxIdle {
+		p.SetMaxIdleConns(n)
+	}
+}
+
+// SetConnMaxLifetime sets the maximum amount of time a connection may be reused.
+//
+// Expired connections may be closed lazily before reuse.
+//
+// If d <= 0, connections are not closed due to a connection's age.
+func (p *Pool) SetConnMaxLifetime(d time.Duration) {
+	if d < 0 {
+		d = 0
+	}
+	p.mu.Lock()
+	// Wake cleaner up when lifetime is shortened.
+	if d > 0 && d < p.maxLifetime && p.cleanerCh != nil {
+		select {
+		case p.cleanerCh <- struct{}{}:
+		default:
+		}
+	}
+	p.maxLifetime = d
+	p.startCleanerLocked()
+	p.mu.Unlock()
+}
+
+// SetConnMaxIdleTime sets the maximum amount of time a connection may be idle.
+//
+// Expired connections may be closed lazily before reuse.
+//
+// If d <= 0, connections are not closed due to a connection's idle time.
+func (p *Pool) SetConnMaxIdleTime(d time.Duration) {
+	if d < 0 {
+		d = 0
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Wake cleaner up when idle time is shortened.
+	if d > 0 && d < p.maxIdleTime && p.cleanerCh != nil {
+		select {
+		case p.cleanerCh <- struct{}{}:
+		default:
+		}
+	}
+	p.maxIdleTime = d
+	p.startCleanerLocked()
 }
 
 // DBStats contains database statistics.
