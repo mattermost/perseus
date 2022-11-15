@@ -1,12 +1,13 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/agnivade/perseus/config"
 	"github.com/agnivade/perseus/internal/server"
@@ -28,8 +29,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "could not start the server: %s\n", err)
 		os.Exit(1)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	sigShutdown := make(chan os.Signal, 1)
+	signal.Notify(sigShutdown, os.Interrupt, syscall.SIGTERM)
+
+	sigReload := make(chan os.Signal, 1)
+	signal.Notify(sigReload, syscall.SIGHUP)
+
 	var stopped atomic.Bool
 
 	go func() {
@@ -41,6 +46,28 @@ func main() {
 	}()
 	defer s.Stop()
 
-	<-ctx.Done()
+	var reloadWg sync.WaitGroup
+	reloadWg.Add(1)
+	go func() {
+		defer reloadWg.Done()
+		for range sigReload {
+			cfg, err := config.Parse(configFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not parse config file: %s\n", err)
+				continue
+			}
+			s.Reload(cfg)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-sigShutdown
+
+	// Shut down the config reload loop
+	signal.Stop(sigReload)
+	close(sigReload)
+	reloadWg.Wait()
+
+	// Mark as stopped
 	stopped.Store(true)
 }

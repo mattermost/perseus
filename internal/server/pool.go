@@ -539,6 +539,10 @@ func (p *Pool) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*Se
 	return d, closing
 }
 
+func (p *Pool) Reload(_ PoolConfig) {
+	//TODO:
+}
+
 // DBStats contains database statistics.
 type DBStats struct {
 	MaxOpenConnections int // Maximum number of open connections to the database.

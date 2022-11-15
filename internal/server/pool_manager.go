@@ -112,6 +112,22 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 	return pool, nil
 }
 
+func (pm *PoolManager) Reload(cfg config.Config) {
+	pm.mut.RLock()
+	defer pm.mut.RUnlock()
+	for _, p := range pm.pools {
+		p.Reload(PoolConfig{
+			MaxIdle:           cfg.PoolSettings.MaxIdle,
+			MaxOpen:           cfg.PoolSettings.MaxOpen,
+			MaxLifetime:       time.Second * time.Duration(cfg.PoolSettings.MaxLifetimeSecs),
+			MaxIdleTime:       time.Second * time.Duration(cfg.PoolSettings.MaxIdletimeSecs),
+			ConnCreateTimeout: time.Second * time.Duration(cfg.PoolSettings.ConnCreateTimeoutSecs),
+			ConnCloseTimeout:  time.Second * time.Duration(cfg.PoolSettings.ConnCloseTimeoutSecs),
+			SchemaExecTimeout: time.Second * time.Duration(cfg.PoolSettings.SchemaExecTimeoutSecs),
+		})
+	}
+}
+
 // Close closes all pools
 func (pm *PoolManager) Close() error {
 	pm.mut.Lock()

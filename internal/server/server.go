@@ -99,6 +99,11 @@ func (s *Server) AcceptConns() error {
 	}
 }
 
+func (s *Server) Reload(cfg config.Config) {
+	s.logger.Println("Reloading config.. ")
+	s.poolMgr.Reload(cfg)
+}
+
 // Stop stops the server
 func (s *Server) Stop() {
 	s.logger.Println("Shutting down server..")
