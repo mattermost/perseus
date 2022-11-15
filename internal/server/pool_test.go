@@ -79,6 +79,10 @@ func (mc *connMock) CheckConn() error {
 	return nil
 }
 
+func (mc *connMock) CancelRequest(_ context.Context) error {
+	return nil
+}
+
 func (mc *connMock) Close(_ context.Context) error {
 	return nil
 }

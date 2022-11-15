@@ -15,6 +15,7 @@ type Conner interface {
 	CheckConn() error
 	Close(ctx context.Context) error
 	Exec(ctx context.Context, sql string) *pgconn.MultiResultReader
+	CancelRequest(ctx context.Context) error
 }
 
 type ServerConn struct {
@@ -37,6 +38,10 @@ func (sc *ServerConn) Conn() net.Conn {
 
 func (sc *ServerConn) CheckConn() error {
 	return sc.conn.CheckConn()
+}
+
+func (sc *ServerConn) CancelRequest(ctx context.Context) error {
+	return sc.conn.CancelRequest(ctx)
 }
 
 func (sc *ServerConn) expired(timeout time.Duration) bool {

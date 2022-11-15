@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/agnivade/perseus/config"
+	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +24,10 @@ type Server struct {
 	connMap      map[net.Conn]struct{}
 	clientConnWg sync.WaitGroup
 
+	keyDataMut sync.Mutex
+	// TODO: later have a custom struct rather than depend on pgproto3
+	keyDataMap map[pgproto3.BackendKeyData]*ClientConn
+
 	authPool *pgxpool.Pool
 	poolMgr  *PoolManager
 }
@@ -30,9 +35,10 @@ type Server struct {
 // New creates a new Perseus server
 func New(cfg config.Config) (*Server, error) {
 	s := &Server{
-		cfg:     cfg,
-		logger:  log.New(os.Stdout, "[perseus] ", log.Lshortfile|log.LstdFlags),
-		connMap: make(map[net.Conn]struct{}),
+		cfg:        cfg,
+		logger:     log.New(os.Stdout, "[perseus] ", log.Lshortfile|log.LstdFlags),
+		connMap:    make(map[net.Conn]struct{}),
+		keyDataMap: make(map[pgproto3.BackendKeyData]*ClientConn),
 	}
 
 	s.logger.Println("Initializing server..")
@@ -92,7 +98,7 @@ func (s *Server) AcceptConns() error {
 			s.connMap[conn] = struct{}{}
 			s.connMut.Unlock()
 
-			if err := s.handleConn(c); err != nil {
+			if err := s.handleConn(c); err != nil && err != ErrCancelComplete {
 				s.logger.Printf("error while handling conn: %v\n", err)
 			}
 		}(conn)

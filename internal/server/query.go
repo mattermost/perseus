@@ -1,8 +1,11 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgproto3"
 )
@@ -20,6 +23,10 @@ type ClientConn struct {
 	logger   *log.Logger
 	pool     *Pool
 
+	// mut makes the getting of pool, and setting of the serverConn
+	// atomic. This allows us to find the serverConn for a clientConn
+	// to cancel a request.
+	mut sync.Mutex
 	// This is set to non-nil if there's an active transaction going on.
 	serverConn *ServerConn
 
@@ -37,11 +44,10 @@ func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool, sch
 
 func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 	// Leasing a connection
-	if cc.serverConn == nil {
-		if err := cc.acquireConn(); err != nil {
-			return err
-		}
+	if err := cc.acquireConn(); err != nil {
+		return err
 	}
+
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
 	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
 	serverEnd.Send(feMsg)
@@ -58,11 +64,10 @@ func (cc *ClientConn) handleQuery(feMsg pgproto3.FrontendMessage) error {
 
 func (cc *ClientConn) handleExtendedQuery(feMsg pgproto3.FrontendMessage) error {
 	// Leasing a connection
-	if cc.serverConn == nil {
-		if err := cc.acquireConn(); err != nil {
-			return err
-		}
+	if err := cc.acquireConn(); err != nil {
+		return err
 	}
+
 	serverEnd := pgproto3.NewFrontend(cc.serverConn.Conn(), cc.serverConn.Conn())
 	// serverEnd.Trace(cc.logger.Writer(), pgproto3.TracerOptions{})
 	serverEnd.Send(feMsg)
@@ -114,8 +119,10 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 
 			// Releasing the conn back to the pool
 			if cc.txStatus == StatusIdle {
+				cc.mut.Lock()
 				cc.pool.ReleaseConn(cc.serverConn)
 				cc.serverConn = nil
+				cc.mut.Unlock()
 			}
 			return nil
 		default:
@@ -132,6 +139,12 @@ func (cc *ClientConn) readBackendResponse(serverEnd *pgproto3.Frontend) error {
 }
 
 func (cc *ClientConn) acquireConn() error {
+	cc.mut.Lock()
+	defer cc.mut.Unlock()
+	if cc.serverConn != nil {
+		return nil
+	}
+
 	conn, err := cc.pool.AcquireConn()
 	if err != nil {
 		return fmt.Errorf("error while acquiring conn: %w", err)
@@ -152,4 +165,16 @@ func (cc *ClientConn) acquireConn() error {
 
 	cc.serverConn = conn
 	return nil
+}
+
+func (cc *ClientConn) CancelServerConn() error {
+	cc.mut.Lock()
+	if cc.serverConn == nil {
+		return nil
+	}
+	cc.mut.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(cc.pool.connCreateTimeout))
+	defer cancel()
+	return cc.serverConn.CancelRequest(ctx)
 }

@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"net"
 	"time"
 
@@ -31,9 +34,14 @@ type AuthRow struct {
 	dest_pass_enc      string
 }
 
+// ErrCancelComplete is a special error to indicate the caller
+// not to log any error messages, since on cancelRequest, the server
+// just closes the connection.
+var ErrCancelComplete = errors.New("cancel complete")
+
 func (s *Server) handleConn(c net.Conn) (err error) {
 	handle := pgproto3.NewBackend(c, c)
-	params, err := handleStartup(handle)
+	params, err := s.handleStartup(handle)
 	if err != nil {
 		return err
 	}
@@ -88,6 +96,11 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	}
 
 	handle.Send(&pgproto3.AuthenticationOk{})
+	keyData := pgproto3.BackendKeyData{
+		ProcessID: s.getRandUint32(),
+		SecretKey: s.getRandUint32(),
+	}
+	handle.Send(&keyData)
 	handle.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
 	if err := handle.Flush(); err != nil {
 		return fmt.Errorf("error while flushing authOK: %w", err)
@@ -99,7 +112,12 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	}
 	cc := NewClientConn(handle, s.logger, pool, params.schema)
 
+	s.keyDataMut.Lock()
+	s.keyDataMap[keyData] = cc
+	s.keyDataMut.Unlock()
+
 	defer func() {
+		cc.mut.Lock()
 		if cc.serverConn != nil {
 			if err != nil || cc.txStatus != StatusUnset /* This takes of care TxStatus = E */ {
 				if err2 := cc.serverConn.Close(); err2 != nil {
@@ -108,6 +126,11 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 				cc.serverConn = nil
 			}
 		}
+		cc.mut.Unlock()
+
+		s.keyDataMut.Lock()
+		delete(s.keyDataMap, keyData)
+		s.keyDataMut.Unlock()
 	}()
 
 	// enter command cycle
@@ -143,7 +166,7 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	}
 }
 
-func handleStartup(handle *pgproto3.Backend) (*startupParams, error) {
+func (s *Server) handleStartup(handle *pgproto3.Backend) (*startupParams, error) {
 	startupMsg, err := handle.ReceiveStartupMessage()
 	if err != nil {
 		return nil, fmt.Errorf("error while receiving startup message: %w", err)
@@ -177,7 +200,27 @@ func handleStartup(handle *pgproto3.Backend) (*startupParams, error) {
 		if err := handle.Flush(); err != nil {
 			return nil, fmt.Errorf("error while flushing denySSL: %w", err)
 		}
-		return handleStartup(handle)
+		return s.handleStartup(handle)
+	case *pgproto3.CancelRequest:
+		var toCancel *ClientConn
+		s.keyDataMut.Lock()
+		toCancel = s.keyDataMap[pgproto3.BackendKeyData{
+			ProcessID: typedMsg.ProcessID,
+			SecretKey: typedMsg.SecretKey,
+		}]
+		s.keyDataMut.Unlock()
+
+		// A client connection should exist
+		if toCancel == nil {
+			return nil, fmt.Errorf("connection not found with given cancel request: %v", typedMsg)
+		}
+
+		s.logger.Println("Handling CancelRequest")
+		if err := toCancel.CancelServerConn(); err != nil {
+			return nil, fmt.Errorf("error while cancelling server conn: %w", err)
+		}
+
+		return nil, ErrCancelComplete
 	}
 
 	return nil, fmt.Errorf("unexpected startup msg: %T", startupMsg)
@@ -198,4 +241,13 @@ func (src *denySSL) Encode(dst []byte) []byte {
 func sendAndFlush(handle *pgproto3.Backend, msg string) {
 	handle.Send(&pgproto3.ErrorResponse{Message: msg})
 	handle.Flush()
+}
+
+func (s *Server) getRandUint32() uint32 {
+	n, err := rand.Int(rand.Reader, big.NewInt(math.MaxUint32-1))
+	if err != nil {
+		s.logger.Printf("Error while generating random number: %v", err)
+		return 0
+	}
+	return uint32(n.Int64())
 }
