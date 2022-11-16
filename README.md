@@ -9,6 +9,7 @@ Perseus is a pgbouncer replacement written in pure Go. It has been written mainl
 1. We need a table called `perseus_auth` to be present in some database. This table will serve as the auth table to authenticate clients connecting to the service.
 2. We need to procure a KMS Key ARN, and the corresponding AWS credentials to use that key.
 3. We need rows in `perseus_auth` per DB to be present for each client connecting to the service.
+4. Set the `schema_search_path` as a new query param in the MM DSN. This should be the same value as `source_schema` in the table.
 
 Let's go through these steps in detail:
 1. Create a table as per below:
@@ -112,6 +113,8 @@ func main() {
 ```
 
 We have all the parts ready to populate the row in the DB!
+
+4. Pretty self-explanatory. Just needs to be set on the MM side.
 
 ### Perseus Config
 
