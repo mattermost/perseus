@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/agnivade/perseus/config"
-	"github.com/agnivade/perseus/internal/server"
+	"github.com/mattermost/perseus/config"
+	"github.com/mattermost/perseus/internal/server"
 )
 
 func main() {
