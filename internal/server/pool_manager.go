@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mattermost/perseus/config"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/aws/aws-sdk-go/service/kms/kmsiface"
+	"github.com/mattermost/perseus/config"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )

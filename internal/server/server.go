@@ -8,9 +8,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/mattermost/perseus/config"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mattermost/perseus/config"
 )
 
 // Server contains all the necessary information to run Perseus
