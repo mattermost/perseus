@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/agnivade/perseus/config"
+	"github.com/mattermost/perseus/config"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

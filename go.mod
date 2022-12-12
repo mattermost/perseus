@@ -1,4 +1,4 @@
-module github.com/agnivade/perseus
+module github.com/mattermost/perseus
 
 go 1.19
 

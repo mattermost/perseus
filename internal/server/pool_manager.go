@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agnivade/perseus/config"
+	"github.com/mattermost/perseus/config"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
