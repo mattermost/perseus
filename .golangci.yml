@@ -1,0 +1,22 @@
+# Configuration file for golangci-lint linter.
+# This will be automatically picked up when golangci-lint is invoked.
+# For all config options, see https://golangci-lint.run/usage/configuration/#config-file
+#
+
+# options for analysis running
+run:
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  timeout: 5m
+
+linters:
+  # enable some extra linters, see here for the list: https://golangci-lint.run/usage/linters/
+  enable:
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - gofmt
+    - gosec
+    - nilerr
+  disable:
+    - ineffassign
+    - staticcheck
