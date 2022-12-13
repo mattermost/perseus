@@ -90,7 +90,7 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 		return errors.New(msg)
 	}
 	if !ok {
-		msg := fmt.Sprintf("password mismatch")
+		msg := "password mismatch"
 		sendAndFlush(handle, msg)
 		return errors.New(msg)
 	}
