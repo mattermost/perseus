@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-
 const (
 	namespace = "perseus"
 )
