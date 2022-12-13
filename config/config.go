@@ -11,6 +11,7 @@ import (
 // Config is the configuration for a perseus server.
 type Config struct {
 	ListenAddress    string
+	MetricsAddress   string
 	AWSSettings      AWSSettings
 	AuthDBSettings   AuthDBSettings
 	PoolSettings     PoolSettings

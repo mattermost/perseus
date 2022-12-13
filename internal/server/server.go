@@ -2,15 +2,25 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mattermost/perseus/config"
+)
+
+// Version information, assigned by ldflags
+var (
+	CommitHash string
+	BuildDate  string
 )
 
 // Server contains all the necessary information to run Perseus
@@ -30,6 +40,10 @@ type Server struct {
 
 	authPool *pgxpool.Pool
 	poolMgr  *PoolManager
+
+	metrics    *metrics
+	metricsSrv *http.Server
+	metricsWg  sync.WaitGroup
 }
 
 // New creates a new Perseus server
@@ -58,7 +72,29 @@ func New(cfg config.Config) (*Server, error) {
 	}
 	s.authPool = authPool
 
-	s.poolMgr, err = NewPoolManager(s.cfg, s.logger)
+	if cfg.MetricsAddress != "" {
+		s.metrics = newMetrics()
+		router := mux.NewRouter()
+		s.metricsSrv = &http.Server{
+			Addr:         cfg.MetricsAddress,
+			Handler:      router,
+			ReadTimeout:  60 * time.Second,
+			WriteTimeout: 60 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		}
+		router.Handle("/metrics", s.metrics.metricsHandler())
+
+		s.metricsWg.Add(1)
+		go func() {
+			defer s.metricsWg.Done()
+			err := s.metricsSrv.ListenAndServe()
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				s.logger.Printf("Error while running metrics server: %v\n", err)
+			}
+		}()
+	}
+
+	s.poolMgr, err = NewPoolManager(s.cfg, s.logger, s.metrics)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pool manager: %w", err)
 	}
@@ -136,5 +172,15 @@ func (s *Server) Stop() {
 
 	if err := s.poolMgr.Close(); err != nil {
 		s.logger.Printf("Error closing pool manager: %v\n", err)
+	}
+
+	if s.metricsSrv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.metricsSrv.Shutdown(ctx); err != nil {
+			s.logger.Printf("Error closing metrics server: %v\n", err)
+		}
+		// Wait until the ListenAndServer goroutine has finished.
+		s.metricsWg.Wait()
 	}
 }
