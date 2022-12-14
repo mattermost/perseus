@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -13,19 +14,18 @@ const (
 )
 
 type metrics struct {
-	registry         *prometheus.Registry
-	requestsDuration *prometheus.HistogramVec
+	registry *prometheus.Registry
 }
 
 func newMetrics() *metrics {
 	m := &metrics{}
 	m.registry = prometheus.NewRegistry()
-	options := prometheus.ProcessCollectorOpts{
+	options := collectors.ProcessCollectorOpts{
 		Namespace: namespace,
 	}
 	m.registry.MustRegister(
-		prometheus.NewProcessCollector(options),
-		prometheus.NewGoCollector(),
+		collectors.NewProcessCollector(options),
+		collectors.NewGoCollector(),
 	)
 
 	return m

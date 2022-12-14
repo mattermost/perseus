@@ -151,9 +151,9 @@ func (cc *ClientConn) acquireConn() error {
 	}
 	// We have just got a connection from the pool. First, we check
 	// whether it's healthy or not.
-	if err := conn.CheckConn(); err != nil {
+	if err2 := conn.CheckConn(); err2 != nil {
 		// *Server.handleConn will take care of closing the connection.
-		return fmt.Errorf("error while checking conn: %w", err)
+		return fmt.Errorf("error while checking conn: %w", err2)
 	}
 
 	// This is a low-level method, so passing params is not really supported.
@@ -174,7 +174,7 @@ func (cc *ClientConn) CancelServerConn() error {
 	}
 	cc.mut.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(cc.pool.connCreateTimeout))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*cc.pool.connCreateTimeout)
 	defer cancel()
 	return cc.serverConn.CancelRequest(ctx)
 }

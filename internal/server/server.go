@@ -19,8 +19,10 @@ import (
 
 // Version information, assigned by ldflags
 var (
-	CommitHash string
-	BuildDate  string
+	CommitHash   string
+	BuildVersion string
+	BuildDate    string
+	GoVersion    string
 )
 
 // Server contains all the necessary information to run Perseus
@@ -82,14 +84,15 @@ func New(cfg config.Config) (*Server, error) {
 			WriteTimeout: 60 * time.Second,
 			IdleTimeout:  30 * time.Second,
 		}
+		router.HandleFunc("/health", s.healthHandler)
 		router.Handle("/metrics", s.metrics.metricsHandler())
 
 		s.metricsWg.Add(1)
 		go func() {
 			defer s.metricsWg.Done()
-			err := s.metricsSrv.ListenAndServe()
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.logger.Printf("Error while running metrics server: %v\n", err)
+			err2 := s.metricsSrv.ListenAndServe()
+			if err2 != nil && !errors.Is(err2, http.ErrServerClosed) {
+				s.logger.Printf("Error while running metrics server: %v\n", err2)
 			}
 		}()
 	}

@@ -460,7 +460,8 @@ func (p *Pool) connectionCleaner(d time.Duration) {
 			return
 		}
 
-		d, closing := p.connectionCleanerRunLocked(d)
+		var closing []*ServerConn
+		d, closing = p.connectionCleanerRunLocked(d)
 		p.mu.Unlock()
 		for _, c := range closing {
 			c.Close()

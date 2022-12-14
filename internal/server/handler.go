@@ -102,8 +102,8 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	}
 	handle.Send(&keyData)
 	handle.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
-	if err := handle.Flush(); err != nil {
-		return fmt.Errorf("error while flushing authOK: %w", err)
+	if err2 := handle.Flush(); err2 != nil {
+		return fmt.Errorf("error while flushing authOK: %w", err2)
 	}
 
 	pool, err := s.poolMgr.GetOrCreatePool(row)

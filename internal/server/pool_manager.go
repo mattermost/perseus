@@ -78,9 +78,9 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs))
 		defer cancel()
-		pgConn, err := pgconn.Connect(ctx, createDSN(row))
-		if err != nil {
-			return nil, fmt.Errorf("pgconn failed to connect: %w", err)
+		pgConn, err2 := pgconn.Connect(ctx, createDSN(row))
+		if err2 != nil {
+			return nil, fmt.Errorf("pgconn failed to connect: %w", err2)
 		}
 
 		// We don't hijack the connection here

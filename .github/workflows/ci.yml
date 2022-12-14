@@ -23,6 +23,6 @@ jobs:
         gofmt -l -s -w .
         if [[ -n $(git status --porcelain) ]]; then echo "Please fix the issues with gofmt"; exit 1; fi
     - name: Test
-      run: go test -v ./...
+      run: go test -v -race ./...
     - name: Build
       run: go build ./cmd/perseus

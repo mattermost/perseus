@@ -8,15 +8,23 @@ run:
   # timeout for analysis, e.g. 30s, 5m, default is 1m
   timeout: 5m
 
+linters-settings:
+  gofmt:
+    simplify: true
+  govet:
+    check-shadowing: true
+    enable-all: true
+    disable:
+      - fieldalignment
+
 linters:
-  # enable some extra linters, see here for the list: https://golangci-lint.run/usage/linters/
+  disable-all: true
   enable:
-    - forcetypeassert
-    - goconst
-    - gocritic
     - gofmt
-    - gosec
-    - nilerr
-  disable:
+    - gosimple
+    - govet
     - ineffassign
+    - exportloopref
     - staticcheck
+    - unconvert
+    - unused
