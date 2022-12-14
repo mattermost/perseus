@@ -1,8 +1,19 @@
-# Ignore config.json
-config/config.json
+# Binaries
+dist/
 
-# Ignore log files
+# Editors/IDEs
+*.swp
+*.swo
+*.vim
+.vscode/
+~
+
+# Helm
+Chart.lock
+*.tgz
+
+# App Specific
+config/config.json
 *.log
 
-# Ignore the binary
-perseus
+
