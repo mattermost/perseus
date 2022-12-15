@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"net"
 	"sync"
 	"testing"
@@ -62,7 +61,6 @@ func genBasePoolConfig() PoolConfig {
 		SpawnConn: func(ctx context.Context) (Conner, error) {
 			return &connMock{}, nil
 		},
-		Logger:  log.Default(),
 		MaxOpen: 1,
 		MaxIdle: 1,
 	}

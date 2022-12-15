@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/aws/aws-sdk-go/service/kms/kmsiface"
+	"github.com/mattermost/logr/v2"
 	"github.com/mattermost/perseus/config"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -23,12 +23,12 @@ type PoolManager struct {
 	pools map[string]*Pool
 
 	cfg     config.Config
-	logger  *log.Logger
+	logger  *logr.Logger
 	kms     kmsiface.KMSAPI
 	metrics *metrics
 }
 
-func NewPoolManager(cfg config.Config, logger *log.Logger, metrics *metrics) (*PoolManager, error) {
+func NewPoolManager(cfg config.Config, logger *logr.Logger, metrics *metrics) (*PoolManager, error) {
 	creds := credentials.NewStaticCredentials(cfg.AWSSettings.AccessKeyId, cfg.AWSSettings.SecretAccessKey, "")
 
 	sess, err := session.NewSession(&aws.Config{
@@ -93,7 +93,6 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 
 	pool, err = NewPool(PoolConfig{
 		SpawnConn:         spawnConn,
-		Logger:            pm.logger,
 		MaxIdle:           pm.cfg.PoolSettings.MaxIdle,
 		MaxOpen:           pm.cfg.PoolSettings.MaxOpen,
 		MaxLifetime:       time.Second * time.Duration(pm.cfg.PoolSettings.MaxLifetimeSecs),

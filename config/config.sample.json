@@ -20,5 +20,9 @@
         "ConnCreateTimeoutSecs": 5,
         "ConnCloseTimeoutSecs":  1,
         "SchemaExecTimeoutSecs": 5
+    },
+    "LogSettings": {
+        "Level": "INFO",
+        "Json": true
     }
 }

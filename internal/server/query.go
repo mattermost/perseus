@@ -3,11 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/mattermost/logr/v2"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 type ClientConn struct {
 	handle   *pgproto3.Backend
 	txStatus byte
-	logger   *log.Logger
+	logger   *logr.Logger
 	pool     *Pool
 
 	// mut makes the getting of pool, and setting of the serverConn
@@ -33,7 +33,7 @@ type ClientConn struct {
 	schema string
 }
 
-func NewClientConn(handle *pgproto3.Backend, logger *log.Logger, pool *Pool, schema string) *ClientConn {
+func NewClientConn(handle *pgproto3.Backend, logger *logr.Logger, pool *Pool, schema string) *ClientConn {
 	return &ClientConn{
 		handle: handle,
 		logger: logger,
