@@ -9,10 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const (
-	namespace = "perseus"
-)
-
 type metrics struct {
 	registry *prometheus.Registry
 }
@@ -21,7 +17,7 @@ func newMetrics() *metrics {
 	m := &metrics{}
 	m.registry = prometheus.NewRegistry()
 	options := collectors.ProcessCollectorOpts{
-		Namespace: namespace,
+		Namespace: serviceName,
 	}
 	m.registry.MustRegister(
 		collectors.NewProcessCollector(options),

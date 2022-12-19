@@ -17,6 +17,10 @@ import (
 	"github.com/mattermost/perseus/config"
 )
 
+const (
+	serviceName = "perseus"
+)
+
 // Version information, assigned by ldflags
 var (
 	CommitHash   string

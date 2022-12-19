@@ -12,7 +12,7 @@ type poolCollector struct {
 	idleConnections  *prometheus.Desc
 
 	waitCount         *prometheus.Desc
-	waitDuration      *prometheus.Desc
+	waitDurationSec   *prometheus.Desc
 	maxIdleClosed     *prometheus.Desc
 	maxIdleTimeClosed *prometheus.Desc
 	maxLifetimeClosed *prometheus.Desc
@@ -20,7 +20,7 @@ type poolCollector struct {
 
 func newPoolCollector(p *Pool, destHost, destDB string) *poolCollector {
 	fqName := func(name string) string {
-		return namespace + "_" + name
+		return serviceName + "_" + name
 	}
 	return &poolCollector{
 		p: p,
@@ -49,9 +49,9 @@ func newPoolCollector(p *Pool, destHost, destDB string) *poolCollector {
 			"The total number of connections waited for.",
 			nil, prometheus.Labels{"dest_host": destHost, "dest_db": destDB},
 		),
-		waitDuration: prometheus.NewDesc(
+		waitDurationSec: prometheus.NewDesc(
 			fqName("wait_duration_seconds_total"),
-			"The total time blocked waiting for a new connection.",
+			"The total time (in seconds) blocked waiting for a new connection.",
 			nil, prometheus.Labels{"dest_host": destHost, "dest_db": destDB},
 		),
 		maxIdleClosed: prometheus.NewDesc(
@@ -79,10 +79,10 @@ func (c *poolCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.inUseConnections
 	ch <- c.idleConnections
 	ch <- c.waitCount
-	ch <- c.waitDuration
+	ch <- c.waitDurationSec
 	ch <- c.maxIdleClosed
-	ch <- c.maxLifetimeClosed
 	ch <- c.maxIdleTimeClosed
+	ch <- c.maxLifetimeClosed
 }
 
 // Collect implements Collector.
@@ -93,8 +93,8 @@ func (c *poolCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.inUseConnections, prometheus.GaugeValue, float64(stats.InUse))
 	ch <- prometheus.MustNewConstMetric(c.idleConnections, prometheus.GaugeValue, float64(stats.Idle))
 	ch <- prometheus.MustNewConstMetric(c.waitCount, prometheus.CounterValue, float64(stats.WaitCount))
-	ch <- prometheus.MustNewConstMetric(c.waitDuration, prometheus.CounterValue, stats.WaitDuration.Seconds())
+	ch <- prometheus.MustNewConstMetric(c.waitDurationSec, prometheus.CounterValue, stats.WaitDuration.Seconds())
 	ch <- prometheus.MustNewConstMetric(c.maxIdleClosed, prometheus.CounterValue, float64(stats.MaxIdleClosed))
-	ch <- prometheus.MustNewConstMetric(c.maxLifetimeClosed, prometheus.CounterValue, float64(stats.MaxLifetimeClosed))
 	ch <- prometheus.MustNewConstMetric(c.maxIdleTimeClosed, prometheus.CounterValue, float64(stats.MaxIdleTimeClosed))
+	ch <- prometheus.MustNewConstMetric(c.maxLifetimeClosed, prometheus.CounterValue, float64(stats.MaxLifetimeClosed))
 }
