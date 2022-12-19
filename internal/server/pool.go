@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Pool is a copied implementation of just the connection pooling
@@ -458,7 +460,8 @@ func (p *Pool) connectionCleaner(d time.Duration) {
 			return
 		}
 
-		d, closing := p.connectionCleanerRunLocked(d)
+		var closing []*ServerConn
+		d, closing = p.connectionCleanerRunLocked(d)
 		p.mu.Unlock()
 		for _, c := range closing {
 			c.Close()
@@ -685,9 +688,9 @@ func (p *Pool) Stats() DBStats {
 	stats := DBStats{
 		MaxOpenConnections: p.maxOpen,
 
-		Idle:            len(p.freeConn),
 		OpenConnections: p.numOpen,
 		InUse:           p.numOpen - len(p.freeConn),
+		Idle:            len(p.freeConn),
 
 		WaitCount:         p.waitCount,
 		WaitDuration:      time.Duration(p.waitDuration.Load()),
@@ -696,4 +699,8 @@ func (p *Pool) Stats() DBStats {
 		MaxLifetimeClosed: p.maxLifetimeClosed,
 	}
 	return stats
+}
+
+func (p *Pool) Collector(destHost, destDB string) prometheus.Collector {
+	return newPoolCollector(p, destHost, destDB)
 }

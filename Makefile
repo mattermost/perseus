@@ -61,16 +61,16 @@ GO                           := $(shell which go)
 # Extract GO version from go.mod file
 GO_VERSION                   ?= $(shell grep -E '^go' go.mod | awk {'print $$2'})
 # LDFLAGS
-GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/service.buildHash=$(APP_COMMIT)"
-GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/service.buildVersion=$(APP_VERSION)"
-GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/service.buildDate=$(BUILD_DATE)"
-GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/service.goVersion=$(GO_VERSION)"
+GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/internal/server.CommitHash=$(APP_COMMIT)"
+GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/internal/server.BuildVersion=$(APP_VERSION)"
+GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/internal/server.BuildDate=$(BUILD_DATE)"
+GO_LDFLAGS                   += -X "github.com/mattermost/${APP_NAME}/internal/server.GoVersion=$(GO_VERSION)"
 # Architectures to build for
-GO_BUILD_PLATFORMS           ?= linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 freebsd-amd64
+GO_BUILD_PLATFORMS           ?= linux-amd64
 GO_BUILD_PLATFORMS_ARTIFACTS = $(foreach cmd,$(addprefix go-build/,${APP_NAME}),$(addprefix $(cmd)-,$(GO_BUILD_PLATFORMS)))
 # Build options
-GO_BUILD_OPTS                += -mod=readonly -trimpath
-GO_TEST_OPTS                 += -mod=readonly -failfast -race
+GO_BUILD_OPTS                += -trimpath
+GO_TEST_OPTS                 += -failfast -race
 # Temporary folder to output compiled binaries artifacts
 GO_OUT_BIN_DIR               := ./dist
 
@@ -281,7 +281,7 @@ go-build-docker: # to build binaries under a controlled docker dedicated go cont
 .PHONY: go-run
 go-run: ## to run locally for development
 	@$(INFO) running locally...
-	$(AT)$(GO) run ${GO_BUILD_OPTS} ${CONFIG_APP_CODE} || ${FAIL}
+	$(AT)$(GO) run ${CONFIG_APP_CODE} || ${FAIL}
 	@$(OK) running locally
 
 .PHONY: go-test
@@ -304,14 +304,6 @@ go-mod-check: ## to check go mod files consistency
 	(${WARN} Please run "go mod tidy" and commit the changes in go.mod and go.sum. && ${FAIL} ; exit 128 )
 	@$(OK) Checking go mod files consistency
 
-.PHONY: go-update-dependencies
-go-update-dependencies: ## to update go dependencies (vendor)
-	@$(INFO) updating go dependencies...
-	$(AT)$(GO) get -u ./... && \
-	$(AT)$(GO) mod vendor && \
-	$(AT)$(GO) mod tidy || ${FAIL}
-	@$(OK) updating go dependencies
-
 .PHONY: go-lint
 go-lint: ## to lint go code
 	@$(INFO) App linting...
@@ -322,12 +314,6 @@ go-lint: ## to lint go code
 	${DOCKER_IMAGE_GOLINT} \
 	golangci-lint run ./... || ${FAIL}
 	@$(OK) App linting
-
-.PHONY: go-fmt
-go-fmt: ## to perform formatting
-	@$(INFO) App code formatting...
-	$(AT)$(GO) fmt ./... || ${FAIL}
-	@$(OK) App code formatting...
 
 .PHONY: github-release
 github-release: ## to publish a release and relevant artifacts to GitHub

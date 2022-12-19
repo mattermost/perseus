@@ -22,12 +22,13 @@ type PoolManager struct {
 	mut   sync.RWMutex
 	pools map[string]*Pool
 
-	cfg    config.Config
-	logger *log.Logger
-	kms    kmsiface.KMSAPI
+	cfg     config.Config
+	logger  *log.Logger
+	kms     kmsiface.KMSAPI
+	metrics *metrics
 }
 
-func NewPoolManager(cfg config.Config, logger *log.Logger) (*PoolManager, error) {
+func NewPoolManager(cfg config.Config, logger *log.Logger, metrics *metrics) (*PoolManager, error) {
 	creds := credentials.NewStaticCredentials(cfg.AWSSettings.AccessKeyId, cfg.AWSSettings.SecretAccessKey, "")
 
 	sess, err := session.NewSession(&aws.Config{
@@ -42,17 +43,18 @@ func NewPoolManager(cfg config.Config, logger *log.Logger) (*PoolManager, error)
 	svc := kms.New(sess)
 
 	return &PoolManager{
-		pools:  make(map[string]*Pool),
-		cfg:    cfg,
-		logger: logger,
-		kms:    svc,
+		pools:   make(map[string]*Pool),
+		cfg:     cfg,
+		logger:  logger,
+		kms:     svc,
+		metrics: metrics,
 	}, nil
 }
 
 func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 	// Fast path once the pool is created
 	pm.mut.RLock()
-	pool = pm.pools[row.dest_host+row.dest_db]
+	pool = pm.pools[row.dest_host+"_"+row.dest_db]
 	pm.mut.RUnlock()
 	if pool != nil {
 		return pool, nil
@@ -76,9 +78,9 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(pm.cfg.PoolSettings.ConnCreateTimeoutSecs))
 		defer cancel()
-		pgConn, err := pgconn.Connect(ctx, createDSN(row))
-		if err != nil {
-			return nil, fmt.Errorf("pgconn failed to connect: %w", err)
+		pgConn, err2 := pgconn.Connect(ctx, createDSN(row))
+		if err2 != nil {
+			return nil, fmt.Errorf("pgconn failed to connect: %w", err2)
 		}
 
 		// We don't hijack the connection here
@@ -106,8 +108,12 @@ func (pm *PoolManager) GetOrCreatePool(row AuthRow) (pool *Pool, err error) {
 
 	// Place it in the map
 	pm.mut.Lock()
-	pm.pools[row.dest_host+row.dest_db] = pool
+	pm.pools[row.dest_host+"_"+row.dest_db] = pool
 	pm.mut.Unlock()
+
+	if pm.metrics != nil {
+		pm.metrics.registerCollector(pool.Collector(row.dest_host, row.dest_db))
+	}
 
 	return pool, nil
 }

@@ -16,4 +16,5 @@ Chart.lock
 config/config.json
 *.log
 
-
+# Ignore the binary
+perseus

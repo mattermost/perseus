@@ -96,7 +96,10 @@ func (sc *ServerConn) Exec(sql string) error {
 	mrr := sc.conn.Exec(ctx, sql)
 	var err error
 	for mrr.NextResult() {
-		_, err = mrr.ResultReader().Close()
+		// We ignore the error from Close because
+		// mrr.Close() will anyways return the first error during
+		// the usage of mrr
+		mrr.ResultReader().Close()
 	}
 	err = mrr.Close()
 	return err
