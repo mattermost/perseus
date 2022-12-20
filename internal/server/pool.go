@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,7 +13,6 @@ import (
 // Pool is a copied implementation of just the connection pooling
 // logic from database/sql.
 type Pool struct {
-	logger    *log.Logger
 	spawnConn func(ctx context.Context) (Conner, error)
 
 	mu           sync.Mutex    // protects following fields
@@ -50,7 +48,6 @@ type Pool struct {
 
 type PoolConfig struct {
 	SpawnConn func(ctx context.Context) (Conner, error)
-	Logger    *log.Logger
 
 	MaxIdle           int
 	MaxOpen           int
@@ -80,7 +77,6 @@ func NewPool(cfg PoolConfig) (*Pool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
 		spawnConn:         cfg.SpawnConn,
-		logger:            cfg.Logger,
 		maxIdle:           cfg.MaxIdle,
 		maxOpen:           cfg.MaxOpen,
 		maxLifetime:       cfg.MaxLifetime,
@@ -571,7 +567,6 @@ func (p *Pool) Reload(new PoolConfig) {
 // The default max idle connections is currently 2. This may change in
 // a future release.
 func (p *Pool) SetMaxIdleConns(n int) {
-	p.logger.Println("setting max idle")
 	p.mu.Lock()
 	if n > 0 {
 		p.maxIdle = n

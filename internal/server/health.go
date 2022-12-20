@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/mattermost/logr/v2"
 )
 
 type healthResponse struct {
@@ -20,7 +22,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		GoVersion:    GoVersion,
 	})
 	if err != nil {
-		s.logger.Printf("failed to write health response: %v\n", err)
+		s.logger.Error("Failed to write health response", logr.Err(err))
 		http.Error(w, "failed to write health response", http.StatusInternalServerError)
 		return
 	}

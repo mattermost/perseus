@@ -16,6 +16,12 @@ type Config struct {
 	AuthDBSettings   AuthDBSettings
 	PoolSettings     PoolSettings
 	OverrideSettings map[string]PoolSettings
+	LogSettings      LogSettings
+}
+
+type LogSettings struct {
+	Level string
+	Json  bool
 }
 
 type AWSSettings struct {

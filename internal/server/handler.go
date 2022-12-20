@@ -13,6 +13,7 @@ import (
 
 	scrypt "github.com/agnivade/easy-scrypt"
 	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/mattermost/logr/v2"
 )
 
 type startupParams struct {
@@ -121,7 +122,7 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 		if cc.serverConn != nil {
 			if err != nil || cc.txStatus != StatusUnset /* This takes of care TxStatus = E */ {
 				if err2 := cc.serverConn.Close(); err2 != nil {
-					s.logger.Printf("Error while destroying conn: %v\n", err2)
+					s.logger.Error("Error while destroying conn", logr.Err(err2))
 				}
 				cc.serverConn = nil
 			}
@@ -157,10 +158,10 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 				return err
 			}
 		case *pgproto3.Terminate:
-			s.logger.Println("Received terminate msg, closing connection")
+			s.logger.Info("Received terminate msg, closing connection")
 			return nil
 		default:
-			s.logger.Printf("Received some other msg: %T, cannot handle. Closing\n", feMsg)
+			s.logger.Error("Received some other msg which cannot be handled. Closing", logr.String("type", fmt.Sprintf("%T", feMsg)))
 			return nil
 		}
 	}
@@ -215,7 +216,7 @@ func (s *Server) handleStartup(handle *pgproto3.Backend) (*startupParams, error)
 			return nil, fmt.Errorf("connection not found with given cancel request: %v", typedMsg)
 		}
 
-		s.logger.Println("Handling CancelRequest")
+		s.logger.Info("Handling CancelRequest")
 		if err := toCancel.CancelServerConn(); err != nil {
 			return nil, fmt.Errorf("error while cancelling server conn: %w", err)
 		}
@@ -246,7 +247,7 @@ func sendAndFlush(handle *pgproto3.Backend, msg string) {
 func (s *Server) getRandUint32() uint32 {
 	n, err := rand.Int(rand.Reader, big.NewInt(math.MaxUint32-1))
 	if err != nil {
-		s.logger.Printf("Error while generating random number: %v", err)
+		s.logger.Error("Error while generating random number", logr.Err(err))
 		return 0
 	}
 	return uint32(n.Int64())
