@@ -69,7 +69,7 @@ func New(cfg config.Config) (*Server, error) {
 		keyDataMap: make(map[pgproto3.BackendKeyData]*ClientConn),
 	}
 
-	s.logger.Info("Initializing server..")
+	s.logger.Info("Initializing server...")
 	l, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
 		return nil, fmt.Errorf("error trying to listen on %s: %w", s.cfg.ListenAddress, err)
@@ -157,13 +157,13 @@ func (s *Server) AcceptConns() error {
 }
 
 func (s *Server) Reload(cfg config.Config) {
-	s.logger.Info("Reloading config.. ")
+	s.logger.Info("Reloading config...")
 	s.poolMgr.Reload(cfg)
 }
 
 // Stop stops the server
 func (s *Server) Stop() {
-	s.logger.Info("Shutting down server..")
+	s.logger.Info("Shutting down server...")
 
 	if err := s.ln.Close(); err != nil {
 		s.logger.Error("Error closing listener", logr.Err(err))
@@ -250,7 +250,7 @@ func setupLogging(cfg config.Config) (*logr.Logger, error) {
 
 func stringToStdLevel(level string) (logr.Level, error) {
 	level = strings.ToLower(level)
-	for _, l := range []logr.Level{logr.Debug, logr.Info, logr.Warn, logr.Error} {
+	for _, l := range []logr.Level{logr.Info, logr.Warn, logr.Error} {
 		if l.Name == level {
 			return l, nil
 		}
