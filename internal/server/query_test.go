@@ -28,24 +28,24 @@ func TestHandleQuery(t *testing.T) {
 	go func() {
 		defer close(serverErrChan)
 
-		var err error
-		conn, err = ln.Accept()
-		if err != nil {
-			serverErrChan <- err
+		var err2 error
+		conn, err2 = ln.Accept()
+		if err2 != nil {
+			serverErrChan <- err2
 			return
 		}
 
-		err = conn.SetDeadline(time.Now().Add(time.Millisecond * 450))
-		if err != nil {
-			serverErrChan <- err
+		err2 = conn.SetDeadline(time.Now().Add(time.Millisecond * 450))
+		if err2 != nil {
+			serverErrChan <- err2
 			return
 		}
 
 		backend := pgproto3.NewBackend(conn, conn)
 		script := &pgmock.Script{Steps: pgmock.AcceptUnauthenticatedConnRequestSteps()}
-		err = script.Run(backend)
-		if err != nil {
-			serverErrChan <- err
+		err2 = script.Run(backend)
+		if err2 != nil {
+			serverErrChan <- err2
 			return
 		}
 	}()

@@ -405,8 +405,8 @@ func TestMaxOpenConnBlock(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		sc, err := p.AcquireConn()
-		be.NilErr(rt, err)
+		sc, err2 := p.AcquireConn()
+		be.NilErr(rt, err2)
 		connChan <- sc
 	}()
 
@@ -431,6 +431,7 @@ func TestMaxOpenConnBlock(t *testing.T) {
 
 	p.ReleaseConn(<-connChan)
 	p.ReleaseConn(conn1)
+	p.ReleaseConn(conn0)
 }
 
 func TestReloadPool(t *testing.T) {
