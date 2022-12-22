@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"strings"
 	"sync"
@@ -98,6 +99,11 @@ func New(cfg config.Config) (*Server, error) {
 		}
 		router.HandleFunc("/health", s.healthHandler)
 		router.Handle("/metrics", s.metrics.metricsHandler())
+		router.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+		router.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+		router.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 		s.metricsWg.Add(1)
 		go func() {
