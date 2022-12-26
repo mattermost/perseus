@@ -236,7 +236,7 @@ func TestMaxIdleTimeUpdate(t *testing.T) {
 	cfg := genBasePoolConfig()
 	cfg.MaxOpen = 3
 	cfg.MaxIdle = 3
-	cfg.MaxIdleTime = 2 * time.Second
+	cfg.MaxIdleTime = time.Minute
 
 	rt := be.Relaxed(t)
 
@@ -244,6 +244,7 @@ func TestMaxIdleTimeUpdate(t *testing.T) {
 	be.NilErr(rt, err)
 	defer func() { be.NilErr(rt, p.Close()) }()
 
+	now := time.Now()
 	conn0, err := p.AcquireConn()
 	be.NilErr(rt, err)
 
@@ -271,6 +272,8 @@ func TestMaxIdleTimeUpdate(t *testing.T) {
 	be.Equal(t, 0, p.Stats().OpenConnections)
 	be.Equal(t, 0, p.Stats().Idle)
 	be.Equal(t, 2, p.Stats().MaxIdleTimeClosed)
+	be.True(t, time.Since(now) < cfg.MaxIdleTime)
+
 }
 
 func TestMaxLifeTime(t *testing.T) {
@@ -410,8 +413,8 @@ func TestMaxOpenConnBlock(t *testing.T) {
 		connChan <- sc
 	}()
 
-	// Wait to let some goroutines wait
-	// and ensure that none can acquire without releasing.
+	// Wait to let the goroutine wait
+	// and ensure that it cannot acquire without releasing.
 	time.Sleep(100 * time.Millisecond)
 	be.Equal(t, 2, p.Stats().OpenConnections)
 
@@ -464,6 +467,11 @@ func TestReloadPool(t *testing.T) {
 	be.Equal(t, 8*time.Second, p.maxIdleTime)
 }
 
+// What we are trying to test here is set a limited number of max
+// connections, and then make a new connection request wait.
+// Now we sleep till the maxLifetime expires, and then we release the
+// conn. This will immediately close the released connection
+// and test the p.openerCh code path.
 func TestOpenPendingConnWithReleaseExpiry(t *testing.T) {
 	cfg := genBasePoolConfig()
 	cfg.MaxOpen = 2
