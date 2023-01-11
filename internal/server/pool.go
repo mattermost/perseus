@@ -6,8 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Pool is a copied implementation of just the connection pooling
@@ -696,6 +694,6 @@ func (p *Pool) Stats() DBStats {
 	return stats
 }
 
-func (p *Pool) Collector(destHost, destDB string) prometheus.Collector {
+func (p *Pool) Collector(destHost, destDB string) *poolCollector {
 	return newPoolCollector(p, destHost, destDB)
 }
