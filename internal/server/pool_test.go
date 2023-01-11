@@ -349,7 +349,7 @@ func TestMaxLifetimeUpdate(t *testing.T) {
 	cfg := genBasePoolConfig()
 	cfg.MaxOpen = 3
 	cfg.MaxIdle = 3
-	cfg.MaxLifetime = 1 * time.Second
+	cfg.MaxLifetime = 10 * time.Second
 	cfg.MaxIdleTime = cfg.MaxLifetime * 10
 
 	rt := be.Relaxed(t)
