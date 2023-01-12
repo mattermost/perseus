@@ -70,7 +70,7 @@ func New(cfg config.Config) (*Server, error) {
 		keyDataMap: make(map[pgproto3.BackendKeyData]*ClientConn),
 	}
 
-	s.logger.Info("Initializing server...")
+	s.logger.Info("Initializing server...", logr.String("listen-address", cfg.ListenAddress))
 	l, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
 		return nil, fmt.Errorf("error trying to listen on %s: %w", s.cfg.ListenAddress, err)
@@ -106,6 +106,7 @@ func New(cfg config.Config) (*Server, error) {
 		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 		s.metricsWg.Add(1)
+		s.logger.Info("Initializing metrics...", logr.String("metrics-address", cfg.MetricsAddress))
 		go func() {
 			defer s.metricsWg.Done()
 			err2 := s.metricsSrv.ListenAndServe()
