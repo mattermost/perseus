@@ -70,8 +70,7 @@ func New(cfg config.Config) (*Server, error) {
 		keyDataMap: make(map[pgproto3.BackendKeyData]*ClientConn),
 	}
 
-	s.logger.Info("Initializing server...")
-	s.logger.Info("Initializing database proxy listener...", logr.String("listen-address", cfg.ListenAddress))
+	s.logger.Info("Initializing server...", logr.String("listen-address", cfg.ListenAddress))
 	l, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
 		return nil, fmt.Errorf("error trying to listen on %s: %w", s.cfg.ListenAddress, err)
