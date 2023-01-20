@@ -19,6 +19,7 @@ import (
 	"github.com/mattermost/logr/v2/formatters"
 	"github.com/mattermost/logr/v2/targets"
 	"github.com/mattermost/perseus/config"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -54,6 +55,10 @@ type Server struct {
 	metrics    *metrics
 	metricsSrv *http.Server
 	metricsWg  sync.WaitGroup
+
+	numConnectedClientsPrometheusDesc *prometheus.Desc
+	numConnectedClients               int // number of clients connected to the perseus server
+	numConnectedClientMut             sync.Mutex
 }
 
 // New creates a new Perseus server
@@ -116,6 +121,9 @@ func New(cfg config.Config) (*Server, error) {
 		}()
 	}
 
+	s.addServerMetricsDescriptions()
+	s.metrics.registerCollector(s) // server implements the prometheus collector interface, so it can collect metrics itself
+
 	s.poolMgr, err = NewPoolManager(s.cfg, s.logger, s.metrics)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pool manager: %w", err)
@@ -147,10 +155,16 @@ func (s *Server) AcceptConns() error {
 				delete(s.connMap, conn)
 				s.connMut.Unlock()
 
+				// s.numConnectedClients--
 				s.clientConnWg.Done()
 			}()
 
 			s.logger.Info("Accepting new connection")
+
+			s.numConnectedClientMut.Lock()
+			s.numConnectedClients++
+			s.numConnectedClientMut.Unlock()
+
 			// Populating the conn map.
 			s.connMut.Lock()
 			s.connMap[conn] = struct{}{}
