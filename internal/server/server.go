@@ -160,11 +160,6 @@ func (s *Server) AcceptConns() error {
 			}()
 
 			s.logger.Info("Accepting new connection")
-
-			s.numConnectedClientMut.Lock()
-			s.numConnectedClients++
-			s.numConnectedClientMut.Unlock()
-
 			// Populating the conn map.
 			s.connMut.Lock()
 			s.connMap[conn] = struct{}{}
