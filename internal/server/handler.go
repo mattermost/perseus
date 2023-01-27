@@ -117,10 +117,6 @@ func (s *Server) handleConn(c net.Conn) (err error) {
 	s.keyDataMap[keyData] = cc
 	s.keyDataMut.Unlock()
 
-	s.numConnectedClientMut.Lock()
-	s.numConnectedClients++
-	s.numConnectedClientMut.Unlock()
-
 	defer func() {
 		cc.mut.Lock()
 		if cc.serverConn != nil {

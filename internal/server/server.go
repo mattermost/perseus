@@ -165,6 +165,10 @@ func (s *Server) AcceptConns() error {
 			s.connMap[conn] = struct{}{}
 			s.connMut.Unlock()
 
+			s.numConnectedClientMut.Lock()
+			s.numConnectedClients++
+			s.numConnectedClientMut.Unlock()
+
 			if err := s.handleConn(c); err != nil && err != ErrCancelComplete {
 				s.logger.Error("Error while handling conn", logr.Err(err))
 			}
