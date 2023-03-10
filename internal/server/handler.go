@@ -213,7 +213,7 @@ func (s *Server) handleStartup(handle *pgproto3.Backend) (*startupParams, error)
 
 		// A client connection should exist
 		if toCancel == nil {
-			return nil, fmt.Errorf("connection not found with given cancel request: %v", typedMsg)
+			return nil, fmt.Errorf("connection not found with given cancel request: %#v", typedMsg)
 		}
 
 		s.logger.Info("Handling CancelRequest")
