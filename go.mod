@@ -22,6 +22,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
 	github.com/jackc/puddle/v2 v2.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/lib/pq v1.10.7
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
